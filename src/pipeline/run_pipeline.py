@@ -1,10 +1,3 @@
-"""
-run_pipeline.py - Orquestrador das Fases 2, 3 e 4.
-
-Fluxo:
-    parse_zip -> scrape_many -> load_all_to_db
-"""
-
 from __future__ import annotations
 
 import argparse

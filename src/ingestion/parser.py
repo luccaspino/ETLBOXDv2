@@ -1,19 +1,3 @@
-"""
-parser.py - Fase 2: Parser do ZIP do Letterboxd
-
-Lê os CSVs exportados pelo Letterboxd e retorna DataFrames limpos
-prontos para o scraping (Fase 3) e carga no banco (Fase 4).
-
-DataFrames retornados por parse_zip():
-    - user_df         : dados do usuário (1 linha) -> tabela users
-    - user_films_df   : histórico de visualizações  -> tabela user_films
-    - watchlist_df    : filmes da watchlist          -> tabela watchlist
-    - scrape_queue_df : filmes ainda não no banco    -> fila para o scraper
-
-Nota: films, genres, people etc. NÃO são populados aqui.
-Esses dados vêm do scraping (Fase 3).
-"""
-
 import zipfile
 import logging
 import pandas as pd

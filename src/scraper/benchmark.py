@@ -1,10 +1,3 @@
-"""
-benchmark.py - Benchmark de configuracoes do scraper.
-
-Exemplo:
-python -m src.scraper.benchmark "C:\\caminho\\export.zip" --sample-size 200
-"""
-
 from __future__ import annotations
 
 import argparse

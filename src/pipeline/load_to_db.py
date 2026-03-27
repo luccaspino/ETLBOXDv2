@@ -1,11 +1,3 @@
-"""
-load_to_db.py - Fase 4: carga transacional no PostgreSQL.
-
-Responsabilidades:
-    - Upsert de user importado do Letterboxd
-    - Upsert de filmes e dimensões relacionadas (genres, people, countries)
-    - Carga de fatos pessoais (user_films, watchlist)
-"""
 
 from __future__ import annotations
 

@@ -1,7 +1,3 @@
-"""
-scraper.py - Fase 3: Web scraping (Letterboxd)
-"""
-
 from __future__ import annotations
 
 import csv
