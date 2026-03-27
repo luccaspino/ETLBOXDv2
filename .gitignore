@@ -1,0 +1,12 @@
+.env
+db/data/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+src/**/__pycache__/
+scrape_errors.csv
+scraper_benchmark.csv
