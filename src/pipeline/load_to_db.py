@@ -1,35 +1,14 @@
-
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Iterable
-from urllib.parse import urlparse
 
 import pandas as pd
 
+from src.db.connection import get_connection
 from src.scraper.scraper import FilmScrapeResult
 
 logger = logging.getLogger(__name__)
-
-try:
-    import psycopg
-
-    HAS_PSYCOPG3 = True
-except Exception:
-    psycopg = None
-    HAS_PSYCOPG3 = False
-
-try:
-    import psycopg2
-    from psycopg2.extras import execute_values
-
-    HAS_PSYCOPG2 = True
-except Exception:
-    psycopg2 = None
-    execute_values = None
-    HAS_PSYCOPG2 = False
-
 
 def _normalize_url(url: str | None) -> str | None:
     if not isinstance(url, str):
@@ -136,36 +115,7 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
 
 
 def _connect() -> Any:
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    db = os.getenv("POSTGRES_DB", "letterboxd")
-    user = os.getenv("POSTGRES_USER", "letterboxd")
-    password = os.getenv("POSTGRES_PASSWORD")
-    if not password:
-        raise RuntimeError(
-            "POSTGRES_PASSWORD nao definido no ambiente (.env)."
-        )
-
-    if HAS_PSYCOPG3:
-        return psycopg.connect(
-            host=host,
-            port=port,
-            dbname=db,
-            user=user,
-            password=password,
-            autocommit=False,
-        )
-    if HAS_PSYCOPG2:
-        return psycopg2.connect(
-            host=host,
-            port=port,
-            dbname=db,
-            user=user,
-            password=password,
-        )
-    raise RuntimeError(
-        "Nenhum driver PostgreSQL encontrado. Instale `psycopg` ou `psycopg2-binary`."
-    )
+    return get_connection(autocommit=False)
 
 
 def fetch_existing_film_urls() -> set[str]:

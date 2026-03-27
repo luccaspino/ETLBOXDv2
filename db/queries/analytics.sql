@@ -1,22 +1,3 @@
--- ============================================================
--- Letterboxd Analytics Queries
--- Param style: psycopg named params (ex: %(user_id)s)
--- ============================================================
-
--- ------------------------------------------------------------
--- Base CTE reutilizavel (filtros para tabela/sorteador)
--- ------------------------------------------------------------
--- Params opcionais:
--- %(user_id)s                UUID (obrigatorio)
--- %(min_rating)s             NUMERIC
--- %(max_rating)s             NUMERIC
--- %(director_name)s          TEXT
--- %(actor_name)s             TEXT
--- %(country_code)s           TEXT (ISO2)
--- %(genre_name)s             TEXT
--- %(min_runtime)s            INT
--- %(max_runtime)s            INT
--- %(decade_start)s           INT (ex: 1990)
 WITH filtered_films AS (
     SELECT
         uf.user_id,
@@ -40,53 +21,53 @@ WITH filtered_films AS (
     FROM user_films uf
     JOIN films f ON f.id = uf.film_id
     WHERE uf.user_id = %(user_id)s
-      AND (%(min_rating)s IS NULL OR uf.rating >= %(min_rating)s)
-      AND (%(max_rating)s IS NULL OR uf.rating <= %(max_rating)s)
-      AND (%(min_runtime)s IS NULL OR f.runtime_min >= %(min_runtime)s)
-      AND (%(max_runtime)s IS NULL OR f.runtime_min <= %(max_runtime)s)
+      AND (%(min_rating)s::NUMERIC IS NULL OR uf.rating >= %(min_rating)s::NUMERIC)
+      AND (%(max_rating)s::NUMERIC IS NULL OR uf.rating <= %(max_rating)s::NUMERIC)
+      AND (%(min_runtime)s::INT IS NULL OR f.runtime_min >= %(min_runtime)s::INT)
+      AND (%(max_runtime)s::INT IS NULL OR f.runtime_min <= %(max_runtime)s::INT)
       AND (
-          %(decade_start)s IS NULL
-          OR (f.year IS NOT NULL AND f.year BETWEEN %(decade_start)s AND %(decade_start)s + 9)
+          %(decade_start)s::INT IS NULL
+          OR (f.year IS NOT NULL AND f.year BETWEEN %(decade_start)s::INT AND %(decade_start)s::INT + 9)
       )
       AND (
-          %(director_name)s IS NULL
+          %(director_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_people fp
               JOIN people p ON p.id = fp.person_id
               WHERE fp.film_id = f.id
                 AND fp.role = 'director'
-                AND p.name ILIKE %(director_name)s
+                AND p.name ILIKE %(director_name)s::TEXT
           )
       )
       AND (
-          %(actor_name)s IS NULL
+          %(actor_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_people fp
               JOIN people p ON p.id = fp.person_id
               WHERE fp.film_id = f.id
                 AND fp.role = 'actor'
-                AND p.name ILIKE %(actor_name)s
+                AND p.name ILIKE %(actor_name)s::TEXT
           )
       )
       AND (
-          %(country_code)s IS NULL
+          %(country_code)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_countries fc
               WHERE fc.film_id = f.id
-                AND fc.country_code = %(country_code)s
+                AND fc.country_code = %(country_code)s::TEXT
           )
       )
       AND (
-          %(genre_name)s IS NULL
+          %(genre_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_genres fg
               JOIN genres g ON g.id = fg.genre_id
               WHERE fg.film_id = f.id
-                AND g.name ILIKE %(genre_name)s
+                AND g.name ILIKE %(genre_name)s::TEXT
           )
       )
 )
@@ -260,46 +241,46 @@ WITH filtered_films AS (
     FROM user_films uf
     JOIN films f ON f.id = uf.film_id
     WHERE uf.user_id = %(user_id)s
-      AND (%(min_rating)s IS NULL OR uf.rating >= %(min_rating)s)
-      AND (%(max_rating)s IS NULL OR uf.rating <= %(max_rating)s)
-      AND (%(min_runtime)s IS NULL OR f.runtime_min >= %(min_runtime)s)
-      AND (%(max_runtime)s IS NULL OR f.runtime_min <= %(max_runtime)s)
+      AND (%(min_rating)s::NUMERIC IS NULL OR uf.rating >= %(min_rating)s::NUMERIC)
+      AND (%(max_rating)s::NUMERIC IS NULL OR uf.rating <= %(max_rating)s::NUMERIC)
+      AND (%(min_runtime)s::INT IS NULL OR f.runtime_min >= %(min_runtime)s::INT)
+      AND (%(max_runtime)s::INT IS NULL OR f.runtime_min <= %(max_runtime)s::INT)
       AND (
-          %(decade_start)s IS NULL
-          OR (f.year IS NOT NULL AND f.year BETWEEN %(decade_start)s AND %(decade_start)s + 9)
+          %(decade_start)s::INT IS NULL
+          OR (f.year IS NOT NULL AND f.year BETWEEN %(decade_start)s::INT AND %(decade_start)s::INT + 9)
       )
       AND (
-          %(director_name)s IS NULL
+          %(director_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_people fp
               JOIN people p ON p.id = fp.person_id
-              WHERE fp.film_id = f.id AND fp.role = 'director' AND p.name ILIKE %(director_name)s
+              WHERE fp.film_id = f.id AND fp.role = 'director' AND p.name ILIKE %(director_name)s::TEXT
           )
       )
       AND (
-          %(actor_name)s IS NULL
+          %(actor_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_people fp
               JOIN people p ON p.id = fp.person_id
-              WHERE fp.film_id = f.id AND fp.role = 'actor' AND p.name ILIKE %(actor_name)s
+              WHERE fp.film_id = f.id AND fp.role = 'actor' AND p.name ILIKE %(actor_name)s::TEXT
           )
       )
       AND (
-          %(country_code)s IS NULL
+          %(country_code)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1 FROM film_countries fc
-              WHERE fc.film_id = f.id AND fc.country_code = %(country_code)s
+              WHERE fc.film_id = f.id AND fc.country_code = %(country_code)s::TEXT
           )
       )
       AND (
-          %(genre_name)s IS NULL
+          %(genre_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_genres fg
               JOIN genres g ON g.id = fg.genre_id
-              WHERE fg.film_id = f.id AND g.name ILIKE %(genre_name)s
+              WHERE fg.film_id = f.id AND g.name ILIKE %(genre_name)s::TEXT
           )
       )
 )
@@ -354,46 +335,46 @@ WITH filtered_films AS (
     FROM user_films uf
     JOIN films f ON f.id = uf.film_id
     WHERE uf.user_id = %(user_id)s
-      AND (%(min_rating)s IS NULL OR uf.rating >= %(min_rating)s)
-      AND (%(max_rating)s IS NULL OR uf.rating <= %(max_rating)s)
-      AND (%(min_runtime)s IS NULL OR f.runtime_min >= %(min_runtime)s)
-      AND (%(max_runtime)s IS NULL OR f.runtime_min <= %(max_runtime)s)
+      AND (%(min_rating)s::NUMERIC IS NULL OR uf.rating >= %(min_rating)s::NUMERIC)
+      AND (%(max_rating)s::NUMERIC IS NULL OR uf.rating <= %(max_rating)s::NUMERIC)
+      AND (%(min_runtime)s::INT IS NULL OR f.runtime_min >= %(min_runtime)s::INT)
+      AND (%(max_runtime)s::INT IS NULL OR f.runtime_min <= %(max_runtime)s::INT)
       AND (
-          %(decade_start)s IS NULL
-          OR (f.year IS NOT NULL AND f.year BETWEEN %(decade_start)s AND %(decade_start)s + 9)
+          %(decade_start)s::INT IS NULL
+          OR (f.year IS NOT NULL AND f.year BETWEEN %(decade_start)s::INT AND %(decade_start)s::INT + 9)
       )
       AND (
-          %(director_name)s IS NULL
+          %(director_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_people fp
               JOIN people p ON p.id = fp.person_id
-              WHERE fp.film_id = f.id AND fp.role = 'director' AND p.name ILIKE %(director_name)s
+              WHERE fp.film_id = f.id AND fp.role = 'director' AND p.name ILIKE %(director_name)s::TEXT
           )
       )
       AND (
-          %(actor_name)s IS NULL
+          %(actor_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_people fp
               JOIN people p ON p.id = fp.person_id
-              WHERE fp.film_id = f.id AND fp.role = 'actor' AND p.name ILIKE %(actor_name)s
+              WHERE fp.film_id = f.id AND fp.role = 'actor' AND p.name ILIKE %(actor_name)s::TEXT
           )
       )
       AND (
-          %(country_code)s IS NULL
+          %(country_code)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1 FROM film_countries fc
-              WHERE fc.film_id = f.id AND fc.country_code = %(country_code)s
+              WHERE fc.film_id = f.id AND fc.country_code = %(country_code)s::TEXT
           )
       )
       AND (
-          %(genre_name)s IS NULL
+          %(genre_name)s::TEXT IS NULL
           OR EXISTS (
               SELECT 1
               FROM film_genres fg
               JOIN genres g ON g.id = fg.genre_id
-              WHERE fg.film_id = f.id AND g.name ILIKE %(genre_name)s
+              WHERE fg.film_id = f.id AND g.name ILIKE %(genre_name)s::TEXT
           )
       )
 )
