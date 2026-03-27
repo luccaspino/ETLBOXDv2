@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from src.ingestion.parser import parse_zip
-from src.scraper.scraper import LetterboxdScraper
+from src.ingestion.scraper import LetterboxdScraper
 
 
 def _pick_sample(uris: list[str], sample_size: int, seed: int) -> list[str]:

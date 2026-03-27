@@ -4,3 +4,12 @@ def test_smoke_imports() -> None:
 
     assert callable(run)
     assert callable(legacy_run)
+
+
+def test_api_routes_registered() -> None:
+    from src.api.main import app
+
+    paths = {route.path for route in app.routes}
+    assert "/health" in paths
+    assert "/pipeline/run" in paths
+    assert "/analytics/kpis/main" in paths

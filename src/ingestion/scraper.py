@@ -243,8 +243,8 @@ def _to_float(value: str | None) -> float | None:
 def _stars_to_rating(text: str | None) -> float | None:
     if not text:
         return None
-    stars = text.count("★") + text.count("â˜…")
-    half = 0.5 if ("½" in text or "Â½" in text) else 0.0
+    stars = text.count("â˜…") + text.count("Ã¢Ëœâ€¦")
+    half = 0.5 if ("Â½" in text or "Ã‚Â½" in text) else 0.0
     if stars == 0 and half == 0:
         return None
     return stars + half
@@ -344,7 +344,7 @@ def _extract_genres_from_html(soup: BeautifulSoup) -> list[str]:
     out = []
     for a in soup.select("#tab-genres a[href*='/films/genre/']"):
         txt = a.get_text(" ", strip=True)
-        if txt and txt.lower() != "show all…":
+        if txt and txt.lower() != "show allâ€¦":
             out.append(txt)
     return list(dict.fromkeys(out))
 
@@ -422,10 +422,10 @@ def _parse_film_page(final_url: str, html: str) -> FilmScrapeResult:
         title = movie.get("name")
     if not title:
         title = _extract_meta_content(html, "og:title")
-        if title and " • Letterboxd" in title:
-            title = title.replace(" • Letterboxd", "").strip()
         if title and " â€¢ Letterboxd" in title:
             title = title.replace(" â€¢ Letterboxd", "").strip()
+        if title and " Ã¢â‚¬Â¢ Letterboxd" in title:
+            title = title.replace(" Ã¢â‚¬Â¢ Letterboxd", "").strip()
     if _looks_like_review_title(title):
         title = _title_from_review_title(title) or title
         if isinstance(movie.get("name"), str):
@@ -680,7 +680,7 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
     if len(sys.argv) < 2:
-        print("Uso: python -m src.scraper.scraper <url1> [url2] [...]")
+        print("Uso: python -m src.ingestion.scraper <url1> [url2] [...]")
         raise SystemExit(1)
 
     scraper = LetterboxdScraper()
