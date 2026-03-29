@@ -1,8 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
-from typing import Any
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Iterator
 
 try:
     import psycopg
@@ -78,3 +79,18 @@ def get_connection(autocommit: bool = False) -> Any:
         return conn
 
     raise RuntimeError("Nenhum driver PostgreSQL encontrado. Instale `psycopg` ou `psycopg2-binary`.")
+
+
+def get_read_connection() -> Any:
+    return get_connection(autocommit=False)
+
+
+def get_write_connection() -> Any:
+    return get_connection(autocommit=False)
+
+
+@contextmanager
+def get_cursor() -> Iterator[Any]:
+    with get_read_connection() as conn:
+        with conn.cursor() as cur:
+            yield cur

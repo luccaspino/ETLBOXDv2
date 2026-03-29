@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -15,19 +15,14 @@ from src.api.schemas import (
     YearlyLogItem,
 )
 from src.db.repository import (
-    get_actor_rankings,
-    get_best_rated_actors,
-    get_best_rated_directors,
     get_country_counts,
-    get_director_rankings,
     get_filtered_films,
     get_genre_counts,
     get_logs_by_month,
     get_logs_by_year,
     get_main_kpis,
-    get_most_watched_actors,
-    get_most_watched_directors,
-    get_random_film,
+    get_people_rankings,
+    get_random_watchlist_film,
     get_rating_distribution,
     get_rating_gap_kpis,
     get_release_year_kpi,
@@ -91,9 +86,9 @@ def get_kpis_release_year(username: str = Query(..., description="Username da ta
 
 
 @router.get("/random", response_model=FilteredFilmItem)
-def get_random_logged_film(username: str = Query(..., description="Username da tabela users")) -> FilteredFilmItem:
+def get_random_watchlist_pick(username: str = Query(..., description="Username da tabela users")) -> FilteredFilmItem:
     user_id = _require_user_id(username)
-    film = get_random_film(user_id)
+    film = get_random_watchlist_film(user_id)
     if not film:
         raise HTTPException(status_code=404, detail="Nenhum filme encontrado para este usuario.")
     return FilteredFilmItem(**film)
@@ -135,7 +130,10 @@ def get_directors_ranking(
     min_films: int = Query(3, ge=1, description="Minimo de filmes para entrar no ranking"),
 ) -> list[PersonRankingItem]:
     user_id = _require_user_id(username)
-    return [PersonRankingItem(**row) for row in get_director_rankings(user_id, min_films=min_films)]
+    return [
+        PersonRankingItem(**row)
+        for row in get_people_rankings(user_id, role="director", min_films=min_films, order_by="most_watched")
+    ]
 
 
 @router.get("/rankings/directors/most-watched", response_model=list[PersonRankingItem])
@@ -144,7 +142,10 @@ def get_directors_most_watched(
     min_films: int = Query(1, ge=1, description="Minimo de filmes para entrar no ranking"),
 ) -> list[PersonRankingItem]:
     user_id = _require_user_id(username)
-    return [PersonRankingItem(**row) for row in get_most_watched_directors(user_id, min_films=min_films)]
+    return [
+        PersonRankingItem(**row)
+        for row in get_people_rankings(user_id, role="director", min_films=min_films, order_by="most_watched")
+    ]
 
 
 @router.get("/rankings/directors/best-rated", response_model=list[PersonRankingItem])
@@ -153,7 +154,10 @@ def get_directors_best_rated(
     min_films: int = Query(3, ge=1, description="Minimo de filmes avaliados para entrar no ranking"),
 ) -> list[PersonRankingItem]:
     user_id = _require_user_id(username)
-    return [PersonRankingItem(**row) for row in get_best_rated_directors(user_id, min_films=min_films)]
+    return [
+        PersonRankingItem(**row)
+        for row in get_people_rankings(user_id, role="director", min_films=min_films, order_by="best_rated")
+    ]
 
 
 @router.get("/rankings/actors", response_model=list[PersonRankingItem])
@@ -162,7 +166,10 @@ def get_actors_ranking(
     min_films: int = Query(3, ge=1, description="Minimo de filmes para entrar no ranking"),
 ) -> list[PersonRankingItem]:
     user_id = _require_user_id(username)
-    return [PersonRankingItem(**row) for row in get_actor_rankings(user_id, min_films=min_films)]
+    return [
+        PersonRankingItem(**row)
+        for row in get_people_rankings(user_id, role="actor", min_films=min_films, order_by="most_watched")
+    ]
 
 
 @router.get("/rankings/actors/most-watched", response_model=list[PersonRankingItem])
@@ -171,7 +178,10 @@ def get_actors_most_watched(
     min_films: int = Query(1, ge=1, description="Minimo de filmes para entrar no ranking"),
 ) -> list[PersonRankingItem]:
     user_id = _require_user_id(username)
-    return [PersonRankingItem(**row) for row in get_most_watched_actors(user_id, min_films=min_films)]
+    return [
+        PersonRankingItem(**row)
+        for row in get_people_rankings(user_id, role="actor", min_films=min_films, order_by="most_watched")
+    ]
 
 
 @router.get("/rankings/actors/best-rated", response_model=list[PersonRankingItem])
@@ -180,7 +190,10 @@ def get_actors_best_rated(
     min_films: int = Query(3, ge=1, description="Minimo de filmes avaliados para entrar no ranking"),
 ) -> list[PersonRankingItem]:
     user_id = _require_user_id(username)
-    return [PersonRankingItem(**row) for row in get_best_rated_actors(user_id, min_films=min_films)]
+    return [
+        PersonRankingItem(**row)
+        for row in get_people_rankings(user_id, role="actor", min_films=min_films, order_by="best_rated")
+    ]
 
 
 @router.get("/films", response_model=list[FilteredFilmItem])
@@ -213,5 +226,3 @@ def get_films_table(
         watched_year=watched_year,
     )
     return [FilteredFilmItem(**row) for row in get_filtered_films(user_id, **filters)]
-
-
