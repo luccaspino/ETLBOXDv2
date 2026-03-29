@@ -1,26 +1,19 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
-
-
-class PipelineRunRequest(BaseModel):
-    zip_path: str = Field(..., description="Caminho absoluto para o ZIP exportado do Letterboxd")
-    workers: int = 20
-    timeout: int = 10
-    retries: int = 1
-    retry_backoff: float = 0.25
-    request_interval: float = 0.0
-    progress_every: int = 50
-    errors_out: str | None = "scrape_errors.csv"
-    auto_retry_failed: bool = True
-    retry_failed_passes: int = 6
-    allow_partial: bool = False
+from pydantic import BaseModel
 
 
 class PipelineRunResponse(BaseModel):
     films_upserted_from_scrape: int
     user_films_loaded: int
     watchlist_loaded: int
+
+
+class UserLookupResponse(BaseModel):
+    username: str
+    has_data: bool
+    total_filmes: int
+    total_watchlist: int
 
 
 class MainKpisResponse(BaseModel):
@@ -35,6 +28,48 @@ class RatingGapResponse(BaseModel):
     media_letterboxd: float | None
 
 
+class ReleaseYearResponse(BaseModel):
+    ano_medio_lancamento: float | None
+
+
 class MonthlyLogItem(BaseModel):
-    mes: str
+    mes: int
     total: int
+
+
+class YearlyLogItem(BaseModel):
+    ano: int
+    total: int
+
+
+class RatingDistributionItem(BaseModel):
+    rating: float | None
+    total: int
+
+
+class CountryCountItem(BaseModel):
+    country_code: str
+    total_filmes: int
+
+
+class GenreCountItem(BaseModel):
+    genero: str
+    total_filmes: int
+
+
+class PersonRankingItem(BaseModel):
+    nome: str
+    filmes_assistidos: int
+    media_nota_pessoal: float | None
+
+
+class FilteredFilmItem(BaseModel):
+    film_id: int
+    title: str
+    year: int | None
+    runtime_min: int | None
+    user_rating: float | None
+    letterboxd_avg_rating: float | None
+    watched_date: str | None
+    tagline: str | None
+    letterboxd_url: str

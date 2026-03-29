@@ -129,24 +129,28 @@ def _parse_diary(zf: zipfile.ZipFile) -> pd.DataFrame:
 
 def _parse_ratings(zf: zipfile.ZipFile) -> pd.DataFrame:
     """
-    Lê ratings.csv para cobrir filmes com nota mas sem entrada no diário.
+    Le ratings.csv para cobrir filmes com nota mas sem entrada no diario.
 
-    ATENÇÃO: as URIs aqui são curtas (ex: https://boxd.it/1YKY), formato
+    As URIs aqui sao curtas (ex: https://boxd.it/1YKY), formato
     diferente do diary. O merge com diary deve ser feito por name + year,
-    não por letterboxd_uri.
+    nao por letterboxd_uri.
+
+    rating_date representa a data da nota atual consolidada no export.
     """
     df = _read_csv_from_zip(zf, "ratings.csv")
     _require_columns(df, "ratings.csv", ["name", "year", "letterboxd_uri", "rating"])
 
     ratings_df = pd.DataFrame({
-        "film_name":      _optional_str_column(df, "name"),
-        "film_year":      pd.to_numeric(df["year"], errors="coerce").astype("Int64"),
+        "film_name": _optional_str_column(df, "name"),
+        "film_year": pd.to_numeric(df["year"], errors="coerce").astype("Int64"),
         "letterboxd_uri": _optional_str_column(df, "letterboxd_uri"),
-        "rating":         pd.to_numeric(df["rating"], errors="coerce"),
+        "rating": pd.to_numeric(df["rating"], errors="coerce"),
+        "rating_date": _parse_date(df["date"]) if "date" in df.columns else None,
     })
 
     logger.debug("ratings.csv carregado: %s linha(s).", len(ratings_df))
     return ratings_df
+
 
 
 def _parse_reviews(zf: zipfile.ZipFile) -> pd.DataFrame:
@@ -199,20 +203,18 @@ def _build_user_films(
     reviews_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Consolida diary + ratings + reviews em um único DataFrame de user_films.
+    Consolida diary + ratings + reviews em um unico DataFrame de user_films.
 
-    Estratégia:
-    1. Parte do diary (fonte mais rica: tem watched_date, rewatch, tags).
-    2. Faz merge com ratings por (film_name, film_year) para preencher
-       ratings faltantes E para incluir filmes que só estão no ratings
-       (watched_date = NULL nesses casos).
-    3. Faz merge com reviews por (letterboxd_uri, watched_date) para
-       anexar review_text.
+    Estrategia:
+    1. Parte do diary (fonte historica mais rica: watched_date, rewatch, tags).
+    2. Usa ratings.csv como fonte do estado atual da nota.
+       - preenche ratings faltantes do diary
+       - adiciona uma linha sem watched_date quando a nota atual do ratings.csv
+         eh mais nova que a ultima atividade do diary para aquele filme
+       - adiciona filmes que existem apenas em ratings.csv
+    3. Faz merge com reviews por (letterboxd_uri, watched_date).
     """
 
-    # --- 1. Enriquecer diary com ratings faltantes ---
-    # Alguns filmes no diary não têm nota (ex: só logou sem avaliar).
-    # O ratings tem a nota consolidada mais recente.
     ratings_lookup = ratings_df[["film_name", "film_year", "rating"]].copy()
     ratings_lookup = ratings_lookup.rename(columns={"rating": "rating_from_ratings"})
 
@@ -221,39 +223,50 @@ def _build_user_films(
         on=["film_name", "film_year"],
         how="left",
     )
-    # Prioriza nota do diary; usa ratings como fallback
     diary_enriched["rating"] = diary_enriched["rating"].fillna(
         diary_enriched["rating_from_ratings"]
     )
     diary_enriched = diary_enriched.drop(columns=["rating_from_ratings"])
 
-    # --- 2. Adicionar filmes que só existem em ratings (não estão no diary) ---
-    # Identifica quais filmes do ratings não têm nenhuma entrada no diary
-    diary_keys = set(
-        zip(diary_enriched["film_name"], diary_enriched["film_year"])
+    diary_activity = diary_enriched[["film_name", "film_year", "log_date", "watched_date"]].copy()
+    diary_activity["latest_activity_date"] = diary_activity["log_date"].fillna(
+        diary_activity["watched_date"]
     )
-    ratings_only = ratings_df[
-        ~ratings_df.apply(
-            lambda r: (r["film_name"], r["film_year"]) in diary_keys, axis=1
+    latest_diary_activity = (
+        diary_activity.groupby(["film_name", "film_year"], dropna=False, as_index=False)["latest_activity_date"]
+        .max()
+    )
+
+    ratings_current = ratings_df.merge(
+        latest_diary_activity,
+        on=["film_name", "film_year"],
+        how="left",
+    )
+
+    ratings_current = ratings_current[
+        ratings_current["latest_activity_date"].isna()
+        | (
+            ratings_current["rating_date"].notna()
+            & (ratings_current["rating_date"] > ratings_current["latest_activity_date"])
         )
     ].copy()
 
-    if len(ratings_only) > 0:
+    if len(ratings_current) > 0:
         logger.debug(
-            "%s filme(s) encontrados só no ratings.csv (watched_date = NULL).",
-            len(ratings_only),
+            "%s filme(s) do ratings.csv serao adicionados como estado atual (sem watched_date).",
+            len(ratings_current),
         )
 
-        ratings_only_mapped = pd.DataFrame({
-            "film_name":      ratings_only["film_name"],
-            "film_year":      ratings_only["film_year"],
-            "letterboxd_uri": ratings_only["letterboxd_uri"],
-            "rating":         ratings_only["rating"],
-            "watched_date":   None,
-            "log_date":       None,
-            "is_rewatch":     False,
-            "tags":           None,
-            "review_text":    None,
+        ratings_current_mapped = pd.DataFrame({
+            "film_name": ratings_current["film_name"],
+            "film_year": ratings_current["film_year"],
+            "letterboxd_uri": ratings_current["letterboxd_uri"],
+            "rating": ratings_current["rating"],
+            "watched_date": None,
+            "log_date": ratings_current["rating_date"],
+            "is_rewatch": False,
+            "tags": None,
+            "review_text": None,
         })
 
         with warnings.catch_warnings():
@@ -263,36 +276,27 @@ def _build_user_films(
                 category=FutureWarning,
             )
             user_films_df = pd.concat(
-                [diary_enriched, ratings_only_mapped],
+                [diary_enriched, ratings_current_mapped],
                 ignore_index=True,
             )
     else:
         user_films_df = diary_enriched.copy()
 
-    # --- 3. Anexar reviews ---
     user_films_df = user_films_df.merge(
         reviews_df,
         on=["letterboxd_uri", "watched_date"],
         how="left",
         suffixes=("", "_from_reviews"),
     )
-    # Consolida review_text (vem None do diary, preenchido pelo merge)
     if "review_text_from_reviews" in user_films_df.columns:
         user_films_df["review_text"] = user_films_df["review_text"].fillna(
             user_films_df["review_text_from_reviews"]
         )
         user_films_df = user_films_df.drop(columns=["review_text_from_reviews"])
 
-    # --- 4. Warning para watched_date = NULL ---
-  #  null_date_mask = user_films_df["watched_date"].isna()
-    # if null_date_mask.any():
-    #    logger.warning(
-    #        "%s registro(s) com watched_date = NULL (não cobertos por UNIQUE com DATE).",
-  #          int(null_date_mask.sum()),
-  #      )
-
     logger.debug("user_films consolidado: %s registro(s).", len(user_films_df))
     return user_films_df
+
 
 
 

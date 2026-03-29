@@ -17,7 +17,7 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_username ON users(username);
 
 -- ============================================================
--- FILMS (cache central — 1 linha por filme)
+-- FILMS (cache central - 1 linha por filme)
 -- ============================================================
 CREATE TABLE films (
     id                    SERIAL PRIMARY KEY,
@@ -93,7 +93,7 @@ CREATE TABLE film_countries (
 CREATE INDEX idx_film_countries_code ON film_countries(country_code);
 
 -- ============================================================
--- USER_FILMS (coracao do schema — dados pessoais por usuario)
+-- USER_FILMS (coracao do schema - dados pessoais por usuario)
 -- ============================================================
 CREATE TABLE user_films (
     id           SERIAL PRIMARY KEY,
@@ -104,9 +104,16 @@ CREATE TABLE user_films (
     log_date     DATE,
     is_rewatch   BOOLEAN DEFAULT FALSE,
     review_text  TEXT,
-    tags         VARCHAR(500),
-    UNIQUE (user_id, film_id, watched_date)
+    tags         VARCHAR(500)
 );
+
+CREATE UNIQUE INDEX uq_user_films_user_film_watched_not_null
+    ON user_films(user_id, film_id, watched_date)
+    WHERE watched_date IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_user_films_user_film_watched_null
+    ON user_films(user_id, film_id)
+    WHERE watched_date IS NULL;
 
 CREATE INDEX idx_user_films_user       ON user_films(user_id);
 CREATE INDEX idx_user_films_film       ON user_films(film_id);

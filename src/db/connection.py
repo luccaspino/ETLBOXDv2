@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from typing import Any
@@ -31,38 +31,50 @@ def _read_dotenv(path: str = ".env") -> dict[str, str]:
         if not raw or raw.startswith("#") or "=" not in raw:
             continue
         key, value = raw.split("=", 1)
-        env[key.strip()] = value.strip().strip("\"").strip("'")
+        env[key.strip()] = value.strip().strip('"').strip("'")
     return env
 
 
 def get_connection(autocommit: bool = False) -> Any:
     dotenv = _read_dotenv(".env")
 
+    database_url = os.getenv("DATABASE_URL") or dotenv.get("DATABASE_URL")
     host = os.getenv("POSTGRES_HOST") or dotenv.get("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT") or dotenv.get("POSTGRES_PORT", "5432")
     db = os.getenv("POSTGRES_DB") or dotenv.get("POSTGRES_DB", "letterboxd")
     user = os.getenv("POSTGRES_USER") or dotenv.get("POSTGRES_USER", "letterboxd")
     password = os.getenv("POSTGRES_PASSWORD") or dotenv.get("POSTGRES_PASSWORD")
-    if not password:
+    sslmode = os.getenv("POSTGRES_SSLMODE") or dotenv.get("POSTGRES_SSLMODE", "prefer")
+
+    if not database_url and not password:
         raise RuntimeError("POSTGRES_PASSWORD nao definido no ambiente (.env).")
 
     if HAS_PSYCOPG3:
+        if database_url:
+            return psycopg.connect(database_url, autocommit=autocommit)
         return psycopg.connect(
             host=host,
             port=port,
             dbname=db,
             user=user,
             password=password,
+            sslmode=sslmode,
             autocommit=autocommit,
         )
+
     if HAS_PSYCOPG2:
-        conn = psycopg2.connect(
-            host=host,
-            port=port,
-            dbname=db,
-            user=user,
-            password=password,
-        )
+        if database_url:
+            conn = psycopg2.connect(database_url)
+        else:
+            conn = psycopg2.connect(
+                host=host,
+                port=port,
+                dbname=db,
+                user=user,
+                password=password,
+                sslmode=sslmode,
+            )
         conn.autocommit = autocommit
         return conn
+
     raise RuntimeError("Nenhum driver PostgreSQL encontrado. Instale `psycopg` ou `psycopg2-binary`.")
