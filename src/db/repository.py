@@ -555,6 +555,35 @@ def _fetch_all_film_ids(cur: Any) -> tuple[dict[str, int], dict[tuple[str, int |
     return url_map, key_map
 
 
+def _fetch_user_collection_totals(cur: Any, user_id: str) -> tuple[int, int]:
+    cur.execute(
+        """
+        SELECT
+            (
+                SELECT COUNT(*)::INT
+                FROM (
+                    SELECT DISTINCT ON (uf.film_id) uf.film_id
+                    FROM user_films uf
+                    WHERE uf.user_id = %s
+                    ORDER BY
+                        uf.film_id,
+                        COALESCE(uf.log_date, uf.watched_date) DESC NULLS LAST,
+                        uf.watched_date DESC NULLS LAST,
+                        uf.id DESC
+                ) latest_films
+            ) AS total_filmes,
+            (
+                SELECT COUNT(*)::INT
+                FROM watchlist w
+                WHERE w.user_id = %s
+            ) AS total_watchlist
+        """,
+        (user_id, user_id),
+    )
+    row = cur.fetchone()
+    return int(row[0] or 0), int(row[1] or 0)
+
+
 def load_all_to_db(
     parsed: dict[str, pd.DataFrame],
     scrape_results: list[FilmScrapeResult],
@@ -595,6 +624,7 @@ def load_all_to_db(
                 full_film_key_map,
                 url_aliases,
             )
+            total_filmes_loaded, total_watchlist_loaded = _fetch_user_collection_totals(cur, user_id)
 
         conn.commit()
         logger.info("DB: commit concluido.")
@@ -606,10 +636,17 @@ def load_all_to_db(
             if item.ok and item.title and _normalize_url(item.letterboxd_url)
         }
     )
+    logger.info(
+        "Carga user_films/watchlist: linhas_processadas user_films=%s watchlist=%s totais_finais user_films=%s watchlist=%s",
+        user_films_count,
+        watchlist_count,
+        total_filmes_loaded,
+        total_watchlist_loaded,
+    )
     stats = {
         "films_upserted_from_scrape": films_upserted_from_scrape,
-        "user_films_loaded": user_films_count,
-        "watchlist_loaded": watchlist_count,
+        "user_films_loaded": total_filmes_loaded,
+        "watchlist_loaded": total_watchlist_loaded,
     }
     logger.info("Carga concluida: %s", stats)
     return stats
