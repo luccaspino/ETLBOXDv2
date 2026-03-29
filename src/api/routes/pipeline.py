@@ -28,8 +28,7 @@ _REQUIRED_ZIP_FILES = {
     "reviews.csv",
     "watchlist.csv",
 }
-_ALLOWED_ZIP_FILES = _REQUIRED_ZIP_FILES
-_MAX_ARCHIVE_FILE_COUNT = 25
+_MAX_ARCHIVE_FILE_COUNT = 200
 _MAX_ARCHIVE_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 _PIPELINE_RUN_LOCK = threading.Lock()
 
@@ -128,11 +127,11 @@ def _validate_zip_contents(zip_path: Path) -> None:
                     detail=f"ZIP invalido. Arquivos obrigatorios ausentes: {', '.join(missing)}.",
                 )
 
-            unexpected = sorted(names - _ALLOWED_ZIP_FILES)
-            if unexpected:
+            unsupported = sorted(name for name in names if not name.lower().endswith(".csv"))
+            if unsupported:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"ZIP invalido. Arquivos nao suportados: {', '.join(unexpected)}.",
+                    detail=f"ZIP invalido. Arquivos nao suportados: {', '.join(unsupported)}.",
                 )
 
             if len(infos) > _MAX_ARCHIVE_FILE_COUNT:
