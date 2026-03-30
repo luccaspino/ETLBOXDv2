@@ -186,18 +186,6 @@ def get_genres_best_rated(
     ]
 
 
-@router.get("/rankings/directors", response_model=list[PersonRankingItem])
-def get_directors_ranking(
-    username: str = Query(..., description="Username da tabela users"),
-    min_films: int = Query(3, ge=1, description="Minimo de filmes para entrar no ranking"),
-) -> list[PersonRankingItem]:
-    user_id = _require_user_id(username)
-    return [
-        PersonRankingItem(**row)
-        for row in get_people_rankings(user_id, role="director", min_films=min_films, order_by="most_watched")
-    ]
-
-
 @router.get("/rankings/directors/most-watched", response_model=list[PersonRankingItem])
 def get_directors_most_watched(
     username: str = Query(..., description="Username da tabela users"),
@@ -219,18 +207,6 @@ def get_directors_best_rated(
     return [
         PersonRankingItem(**row)
         for row in get_people_rankings(user_id, role="director", min_films=min_films, order_by="best_rated")
-    ]
-
-
-@router.get("/rankings/actors", response_model=list[PersonRankingItem])
-def get_actors_ranking(
-    username: str = Query(..., description="Username da tabela users"),
-    min_films: int = Query(3, ge=1, description="Minimo de filmes para entrar no ranking"),
-) -> list[PersonRankingItem]:
-    user_id = _require_user_id(username)
-    return [
-        PersonRankingItem(**row)
-        for row in get_people_rankings(user_id, role="actor", min_films=min_films, order_by="most_watched")
     ]
 
 
