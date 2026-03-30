@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
     strategy:
       fail-fast: false
       matrix:
@@ -33,4 +35,4 @@ jobs:
         run: python -m compileall src tests
 
       - name: Run unit tests
-        run: pytest -q tests
+        run: python -m pytest -q tests
