@@ -15,3 +15,5 @@ def test_api_routes_registered() -> None:
     assert "/pipeline/run" in paths
     assert "/users/{username}" in paths
     assert "/analytics/kpis/main" in paths
+    assert "/analytics/rankings/countries/most-watched" in paths
+    assert "/analytics/rankings/genres/best-rated" in paths

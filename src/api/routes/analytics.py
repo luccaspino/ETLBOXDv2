@@ -3,12 +3,14 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from src.api.schemas import (
+    CategoryRankingItem,
     CountryCountItem,
     FilteredFilmItem,
     GenreCountItem,
     MainKpisResponse,
     MonthlyLogItem,
     PersonRankingItem,
+    RandomReviewItem,
     RatingDistributionItem,
     RatingGapResponse,
     ReleaseYearResponse,
@@ -16,12 +18,15 @@ from src.api.schemas import (
 )
 from src.db.repository import (
     get_country_counts,
+    get_country_rankings,
     get_filtered_films,
     get_genre_counts,
+    get_genre_rankings,
     get_logs_by_month,
     get_logs_by_year,
     get_main_kpis,
     get_people_rankings,
+    get_random_review,
     get_random_watchlist_film,
     get_rating_distribution,
     get_rating_gap_kpis,
@@ -94,6 +99,15 @@ def get_random_watchlist_pick(username: str = Query(..., description="Username d
     return FilteredFilmItem(**film)
 
 
+@router.get("/reviews/random", response_model=RandomReviewItem)
+def get_random_review_pick(username: str = Query(..., description="Username da tabela users")) -> RandomReviewItem:
+    user_id = _require_user_id(username)
+    review = get_random_review(user_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Nenhuma review encontrada para este usuario.")
+    return RandomReviewItem(**review)
+
+
 @router.get("/logs/monthly", response_model=list[MonthlyLogItem])
 def get_monthly_logs(username: str = Query(..., description="Username da tabela users")) -> list[MonthlyLogItem]:
     user_id = _require_user_id(username)
@@ -122,6 +136,54 @@ def get_countries_distribution(username: str = Query(..., description="Username 
 def get_genres_distribution(username: str = Query(..., description="Username da tabela users")) -> list[GenreCountItem]:
     user_id = _require_user_id(username)
     return [GenreCountItem(**row) for row in get_genre_counts(user_id)]
+
+
+@router.get("/rankings/countries/most-watched", response_model=list[CategoryRankingItem])
+def get_countries_most_watched(
+    username: str = Query(..., description="Username da tabela users"),
+    min_films: int = Query(1, ge=1, description="Minimo de filmes para entrar no ranking"),
+) -> list[CategoryRankingItem]:
+    user_id = _require_user_id(username)
+    return [
+        CategoryRankingItem(**row)
+        for row in get_country_rankings(user_id, order_by="most_watched", min_films=min_films)
+    ]
+
+
+@router.get("/rankings/countries/best-rated", response_model=list[CategoryRankingItem])
+def get_countries_best_rated(
+    username: str = Query(..., description="Username da tabela users"),
+    min_films: int = Query(3, ge=1, description="Minimo de filmes avaliados para entrar no ranking"),
+) -> list[CategoryRankingItem]:
+    user_id = _require_user_id(username)
+    return [
+        CategoryRankingItem(**row)
+        for row in get_country_rankings(user_id, order_by="best_rated", min_films=min_films)
+    ]
+
+
+@router.get("/rankings/genres/most-watched", response_model=list[CategoryRankingItem])
+def get_genres_most_watched(
+    username: str = Query(..., description="Username da tabela users"),
+    min_films: int = Query(1, ge=1, description="Minimo de filmes para entrar no ranking"),
+) -> list[CategoryRankingItem]:
+    user_id = _require_user_id(username)
+    return [
+        CategoryRankingItem(**row)
+        for row in get_genre_rankings(user_id, order_by="most_watched", min_films=min_films)
+    ]
+
+
+@router.get("/rankings/genres/best-rated", response_model=list[CategoryRankingItem])
+def get_genres_best_rated(
+    username: str = Query(..., description="Username da tabela users"),
+    min_films: int = Query(3, ge=1, description="Minimo de filmes avaliados para entrar no ranking"),
+) -> list[CategoryRankingItem]:
+    user_id = _require_user_id(username)
+    return [
+        CategoryRankingItem(**row)
+        for row in get_genre_rankings(user_id, order_by="best_rated", min_films=min_films)
+    ]
 
 
 @router.get("/rankings/directors", response_model=list[PersonRankingItem])

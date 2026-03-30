@@ -4,7 +4,9 @@ import logging
 import os
 import tempfile
 import threading
+import time
 import zipfile
+from collections import deque
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
@@ -31,6 +33,8 @@ _REQUIRED_ZIP_FILES = {
 _MAX_ARCHIVE_FILE_COUNT = 200
 _MAX_ARCHIVE_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 _PIPELINE_RUN_LOCK = threading.Lock()
+_PIPELINE_RATE_LIMIT_LOCK = threading.Lock()
+_PIPELINE_REQUEST_HISTORY: dict[str, deque[float]] = {}
 
 
 def _max_zip_bytes() -> int:
@@ -40,6 +44,58 @@ def _max_zip_bytes() -> int:
     except ValueError:
         mb = 25
     return mb * 1024 * 1024
+
+
+def _rate_limit_window_seconds() -> int:
+    raw = os.getenv("PIPELINE_RATE_LIMIT_WINDOW_SECONDS", "900").strip()
+    try:
+        seconds = max(1, int(raw))
+    except ValueError:
+        seconds = 900
+    return seconds
+
+
+def _rate_limit_max_requests() -> int:
+    raw = os.getenv("PIPELINE_RATE_LIMIT_MAX_REQUESTS", "3").strip()
+    try:
+        count = max(1, int(raw))
+    except ValueError:
+        count = 3
+    return count
+
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "").strip()
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip() or "unknown"
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_rate_limit(request: Request) -> None:
+    client_ip = _client_ip(request)
+    now = time.time()
+    window_seconds = _rate_limit_window_seconds()
+    max_requests = _rate_limit_max_requests()
+
+    with _PIPELINE_RATE_LIMIT_LOCK:
+        history = _PIPELINE_REQUEST_HISTORY.setdefault(client_ip, deque())
+        cutoff = now - window_seconds
+
+        while history and history[0] <= cutoff:
+            history.popleft()
+
+        if len(history) >= max_requests:
+            retry_after = max(1, int(history[0] + window_seconds - now))
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    "Limite de requisicoes do pipeline excedido. "
+                    f"Tente novamente em {retry_after} segundos."
+                ),
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        history.append(now)
 
 
 def _validate_request_size(request: Request) -> None:
@@ -171,6 +227,7 @@ def run_pipeline(
     max_failed_ratio: float = Form(0.0),
 ) -> PipelineRunResponse:
     temp_zip_path: Path | None = None
+    _enforce_rate_limit(request)
     acquired = _PIPELINE_RUN_LOCK.acquire(blocking=False)
     if not acquired:
         raise HTTPException(

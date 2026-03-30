@@ -48,7 +48,7 @@ class RatingDistributionItem(BaseModel):
 
 
 class CountryCountItem(BaseModel):
-    country_code: str
+    country_name: str
     total_filmes: int
 
 
@@ -63,6 +63,12 @@ class PersonRankingItem(BaseModel):
     media_nota_pessoal: float | None
 
 
+class CategoryRankingItem(BaseModel):
+    nome: str
+    filmes_assistidos: int
+    media_nota_pessoal: float | None
+
+
 class FilteredFilmItem(BaseModel):
     film_id: int
     title: str
@@ -72,4 +78,13 @@ class FilteredFilmItem(BaseModel):
     letterboxd_avg_rating: float | None
     watched_date: str | None
     tagline: str | None
+    letterboxd_url: str
+
+
+class RandomReviewItem(BaseModel):
+    film_id: int
+    title: str
+    year: int | None
+    watched_date: str | None
+    review_text: str
     letterboxd_url: str

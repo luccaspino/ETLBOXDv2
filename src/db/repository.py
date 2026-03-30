@@ -322,6 +322,92 @@ def _country_code(raw: str) -> str | None:
     return manual_map.get(slug)
 
 
+COUNTRY_CODE_TO_NAME = {
+    "AE": "United Arab Emirates",
+    "AR": "Argentina",
+    "AT": "Austria",
+    "AU": "Australia",
+    "BE": "Belgium",
+    "BG": "Bulgaria",
+    "BO": "Bolivia",
+    "BR": "Brazil",
+    "CA": "Canada",
+    "CH": "Switzerland",
+    "CL": "Chile",
+    "CN": "China",
+    "CO": "Colombia",
+    "CS": "Serbia and Montenegro",
+    "CU": "Cuba",
+    "CZ": "Czech Republic",
+    "DE": "Germany",
+    "DK": "Denmark",
+    "DO": "Dominican Republic",
+    "DZ": "Algeria",
+    "EC": "Ecuador",
+    "EE": "Estonia",
+    "EG": "Egypt",
+    "ES": "Spain",
+    "FI": "Finland",
+    "FR": "France",
+    "GB": "United Kingdom",
+    "GE": "Georgia",
+    "GR": "Greece",
+    "HK": "Hong Kong",
+    "HR": "Croatia",
+    "HU": "Hungary",
+    "ID": "Indonesia",
+    "IE": "Ireland",
+    "IL": "Israel",
+    "IN": "India",
+    "IR": "Iran",
+    "IS": "Iceland",
+    "IT": "Italy",
+    "JP": "Japan",
+    "KR": "South Korea",
+    "LB": "Lebanon",
+    "LT": "Lithuania",
+    "LU": "Luxembourg",
+    "LV": "Latvia",
+    "MA": "Morocco",
+    "ME": "Montenegro",
+    "MX": "Mexico",
+    "MY": "Malaysia",
+    "NG": "Nigeria",
+    "NL": "Netherlands",
+    "NO": "Norway",
+    "NZ": "New Zealand",
+    "PE": "Peru",
+    "PH": "Philippines",
+    "PL": "Poland",
+    "PT": "Portugal",
+    "RO": "Romania",
+    "RS": "Serbia",
+    "RU": "Russia",
+    "SE": "Sweden",
+    "SG": "Singapore",
+    "SI": "Slovenia",
+    "SK": "Slovakia",
+    "TH": "Thailand",
+    "TN": "Tunisia",
+    "TR": "Turkey",
+    "TW": "Taiwan",
+    "UA": "Ukraine",
+    "UK": "United Kingdom",
+    "US": "United States",
+    "UY": "Uruguay",
+    "VE": "Venezuela",
+    "VN": "Vietnam",
+    "ZA": "South Africa",
+}
+
+
+def _country_name(country_code: str | None) -> str | None:
+    if not country_code:
+        return None
+    normalized = country_code.strip().upper()
+    return COUNTRY_CODE_TO_NAME.get(normalized, normalized)
+
+
 def _upsert_film_dimensions(cur: Any, results: list[FilmScrapeResult], film_id_by_url: dict[str, int]) -> None:
     genre_names: set[str] = set()
     people_names: set[str] = set()
@@ -955,6 +1041,40 @@ def get_random_watchlist_film(user_id: str) -> dict[str, Any] | None:
     }
 
 
+def get_random_review(user_id: str) -> dict[str, Any] | None:
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                f.id AS film_id,
+                f.title,
+                f.year,
+                uf.watched_date,
+                uf.review_text,
+                f.letterboxd_url
+            FROM user_films uf
+            JOIN films f ON f.id = uf.film_id
+            WHERE uf.user_id = %s
+              AND uf.review_text IS NOT NULL
+              AND BTRIM(uf.review_text) <> ''
+            ORDER BY random()
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "film_id": int(row[0]),
+        "title": row[1],
+        "year": row[2],
+        "watched_date": str(row[3]) if row[3] is not None else None,
+        "review_text": row[4],
+        "letterboxd_url": row[5],
+    }
+
+
 def get_logs_by_year(user_id: str) -> list[dict[str, Any]]:
     with get_cursor() as cur:
         cur.execute(
@@ -1005,33 +1125,33 @@ def get_rating_distribution(user_id: str) -> list[dict[str, Any]]:
 def get_country_counts(user_id: str) -> list[dict[str, Any]]:
     with get_cursor() as cur:
         cur.execute(
-            """
+            f"""
+            {LATEST_USER_FILMS_CTE}
             SELECT
                 fc.country_code,
                 COUNT(DISTINCT uf.film_id)::INT AS total_filmes
-            FROM user_films uf
+            FROM latest_user_films uf
             JOIN film_countries fc ON fc.film_id = uf.film_id
-            WHERE uf.user_id = %s
             GROUP BY fc.country_code
             ORDER BY total_filmes DESC, fc.country_code
             """,
             (user_id,),
         )
         rows = cur.fetchall()
-    return [{"country_code": row[0], "total_filmes": int(row[1])} for row in rows]
+    return [{"country_name": _country_name(row[0]) or row[0], "total_filmes": int(row[1])} for row in rows]
 
 
 def get_genre_counts(user_id: str) -> list[dict[str, Any]]:
     with get_cursor() as cur:
         cur.execute(
-            """
+            f"""
+            {LATEST_USER_FILMS_CTE}
             SELECT
                 g.name AS genero,
                 COUNT(DISTINCT uf.film_id)::INT AS total_filmes
-            FROM user_films uf
+            FROM latest_user_films uf
             JOIN film_genres fg ON fg.film_id = uf.film_id
             JOIN genres g ON g.id = fg.genre_id
-            WHERE uf.user_id = %s
             GROUP BY g.name
             ORDER BY total_filmes DESC, g.name
             """,
@@ -1039,6 +1159,97 @@ def get_genre_counts(user_id: str) -> list[dict[str, Any]]:
         )
         rows = cur.fetchall()
     return [{"genero": row[0], "total_filmes": int(row[1])} for row in rows]
+
+
+def _get_category_rankings(
+    user_id: str,
+    *,
+    category: str,
+    order_by: str = "most_watched",
+    min_films: int = 1,
+) -> list[dict[str, Any]]:
+    order_sql_map = {
+        "most_watched": "filmes_assistidos DESC, media_nota_pessoal DESC, nome",
+        "best_rated": "media_nota_pessoal DESC, filmes_assistidos DESC, nome",
+    }
+    config_map = {
+        "genre": {
+            "select_name": "g.name",
+            "join_sql": "JOIN film_genres fg ON fg.film_id = uf.film_id JOIN genres g ON g.id = fg.genre_id",
+        },
+        "country": {
+            "select_name": "fc.country_code",
+            "join_sql": "JOIN film_countries fc ON fc.film_id = uf.film_id",
+        },
+    }
+    config = config_map.get(category)
+    if config is None:
+        raise ValueError(f"Categoria de ranking nao suportada: {category}")
+    order_sql = order_sql_map.get(order_by)
+    if order_sql is None:
+        raise ValueError(f"Ordenacao de ranking nao suportada: {order_by}")
+
+    rating_filter = "WHERE uf.rating IS NOT NULL" if order_by == "best_rated" else ""
+
+    with get_cursor() as cur:
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT
+                {config['select_name']} AS nome,
+                COUNT(DISTINCT uf.film_id)::INT AS filmes_assistidos,
+                ROUND(AVG(uf.rating)::NUMERIC, 2) AS media_nota_pessoal
+            FROM latest_user_films uf
+            {config['join_sql']}
+            {rating_filter}
+            GROUP BY 1
+            HAVING COUNT(DISTINCT uf.film_id) >= %s
+            ORDER BY {order_sql}
+            """,
+            (user_id, min_films),
+        )
+        rows = cur.fetchall()
+
+    output: list[dict[str, Any]] = []
+    for nome, filmes_assistidos, media_nota_pessoal in rows:
+        if category == "country":
+            nome = _country_name(nome) or nome
+        output.append(
+            {
+                "nome": nome,
+                "filmes_assistidos": int(filmes_assistidos),
+                "media_nota_pessoal": _normalize_number(media_nota_pessoal),
+            }
+        )
+    return output
+
+
+def get_country_rankings(
+    user_id: str,
+    *,
+    order_by: str = "most_watched",
+    min_films: int = 1,
+) -> list[dict[str, Any]]:
+    return _get_category_rankings(
+        user_id,
+        category="country",
+        order_by=order_by,
+        min_films=min_films,
+    )
+
+
+def get_genre_rankings(
+    user_id: str,
+    *,
+    order_by: str = "most_watched",
+    min_films: int = 1,
+) -> list[dict[str, Any]]:
+    return _get_category_rankings(
+        user_id,
+        category="genre",
+        order_by=order_by,
+        min_films=min_films,
+    )
 
 
 def get_people_rankings(
@@ -1207,10 +1418,13 @@ __all__ = [
     "get_logs_by_month",
     "get_release_year_kpi",
     "get_random_watchlist_film",
+    "get_random_review",
     "get_logs_by_year",
     "get_rating_distribution",
     "get_country_counts",
     "get_genre_counts",
+    "get_country_rankings",
+    "get_genre_rankings",
     "get_people_rankings",
     "get_filtered_films",
 ]
