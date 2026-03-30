@@ -1015,6 +1015,7 @@ def get_random_watchlist_film(user_id: str) -> dict[str, Any] | None:
                 f.letterboxd_avg_rating,
                 luf.watched_date,
                 f.tagline,
+                f.poster_url,
                 f.letterboxd_url
             FROM watchlist w
             JOIN films f ON f.id = w.film_id
@@ -1037,7 +1038,8 @@ def get_random_watchlist_film(user_id: str) -> dict[str, Any] | None:
         "letterboxd_avg_rating": _normalize_number(row[5]),
         "watched_date": str(row[6]) if row[6] is not None else None,
         "tagline": row[7],
-        "letterboxd_url": row[8],
+        "poster_url": row[8],
+        "letterboxd_url": row[9],
     }
 
 
@@ -1346,6 +1348,7 @@ def _fetch_filtered_film_rows(
                 f.letterboxd_avg_rating,
                 uf.watched_date,
                 f.tagline,
+                f.poster_url,
                 f.letterboxd_url
             FROM latest_user_films uf
             JOIN films f ON f.id = uf.film_id
@@ -1369,10 +1372,243 @@ def _serialize_filtered_films(rows: list[tuple[Any, ...]]) -> list[dict[str, Any
             "letterboxd_avg_rating": _normalize_number(row[5]),
             "watched_date": str(row[6]) if row[6] is not None else None,
             "tagline": row[7],
-            "letterboxd_url": row[8],
+            "poster_url": row[8],
+            "letterboxd_url": row[9],
         }
         for row in rows
     ]
+
+
+def get_watchlist_films(user_id: str) -> list[dict[str, Any]]:
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                f.id AS film_id,
+                f.title,
+                f.year,
+                f.runtime_min,
+                f.original_language,
+                f.tagline,
+                f.poster_url,
+                f.letterboxd_url,
+                f.letterboxd_avg_rating,
+                directors.director,
+                genres.genres,
+                cast_top3.cast_top3,
+                w.added_date
+            FROM watchlist w
+            JOIN films f ON f.id = w.film_id
+            LEFT JOIN LATERAL (
+                SELECT STRING_AGG(p.name, ', ' ORDER BY p.name) AS director
+                FROM film_people fp
+                JOIN people p ON p.id = fp.person_id
+                WHERE fp.film_id = f.id
+                  AND fp.role = 'director'
+            ) directors ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT STRING_AGG(g.name, ', ' ORDER BY g.name) AS genres
+                FROM film_genres fg
+                JOIN genres g ON g.id = fg.genre_id
+                WHERE fg.film_id = f.id
+            ) genres ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT STRING_AGG(p.name, ' | ' ORDER BY fp.cast_order) AS cast_top3
+                FROM film_people fp
+                JOIN people p ON p.id = fp.person_id
+                WHERE fp.film_id = f.id
+                  AND fp.role = 'actor'
+                  AND fp.cast_order BETWEEN 1 AND 3
+            ) cast_top3 ON TRUE
+            WHERE w.user_id = %s
+            ORDER BY w.added_date DESC NULLS LAST, f.title
+            """,
+            (user_id,),
+        )
+        rows = cur.fetchall()
+
+    return [
+        {
+            'film_id': int(row[0]),
+            'title': row[1],
+            'year': row[2],
+            'runtime_min': row[3],
+            'original_language': row[4],
+            'tagline': row[5],
+            'poster_url': row[6],
+            'letterboxd_url': row[7],
+            'letterboxd_avg_rating': _normalize_number(row[8]),
+            'director': row[9],
+            'genres': row[10],
+            'cast_top3': row[11],
+            'added_date': str(row[12]) if row[12] is not None else None,
+        }
+        for row in rows
+    ]
+
+
+def get_filter_options(user_id: str) -> dict[str, Any]:
+    with get_cursor() as cur:
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT uf.rating
+            FROM latest_user_films uf
+            WHERE uf.rating IS NOT NULL
+            ORDER BY uf.rating
+            """,
+            (user_id,),
+        )
+        personal_ratings = [_normalize_number(row[0]) for row in cur.fetchall()]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT f.letterboxd_avg_rating
+            FROM latest_user_films uf
+            JOIN films f ON f.id = uf.film_id
+            WHERE f.letterboxd_avg_rating IS NOT NULL
+            ORDER BY f.letterboxd_avg_rating
+            """,
+            (user_id,),
+        )
+        letterboxd_ratings = [_normalize_number(row[0]) for row in cur.fetchall()]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT f.year::INT AS release_year
+            FROM latest_user_films uf
+            JOIN films f ON f.id = uf.film_id
+            WHERE f.year IS NOT NULL
+            ORDER BY release_year DESC
+            """,
+            (user_id,),
+        )
+        release_years = [int(row[0]) for row in cur.fetchall() if row[0] is not None]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT ((f.year / 10) * 10)::INT AS release_decade
+            FROM latest_user_films uf
+            JOIN films f ON f.id = uf.film_id
+            WHERE f.year IS NOT NULL
+            ORDER BY release_decade
+            """,
+            (user_id,),
+        )
+        release_decades = [int(row[0]) for row in cur.fetchall() if row[0] is not None]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT EXTRACT(YEAR FROM uf.watched_date)::INT AS watched_year
+            FROM latest_user_films uf
+            WHERE uf.watched_date IS NOT NULL
+            ORDER BY watched_year DESC
+            """,
+            (user_id,),
+        )
+        watched_years = [int(row[0]) for row in cur.fetchall() if row[0] is not None]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT EXTRACT(MONTH FROM uf.watched_date)::INT AS watched_month
+            FROM latest_user_films uf
+            WHERE uf.watched_date IS NOT NULL
+            ORDER BY watched_month
+            """,
+            (user_id,),
+        )
+        watched_months = [int(row[0]) for row in cur.fetchall() if row[0] is not None]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT g.name
+            FROM latest_user_films uf
+            JOIN film_genres fg ON fg.film_id = uf.film_id
+            JOIN genres g ON g.id = fg.genre_id
+            ORDER BY g.name
+            """,
+            (user_id,),
+        )
+        genres = [str(row[0]) for row in cur.fetchall() if row[0]]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT fc.country_code
+            FROM latest_user_films uf
+            JOIN film_countries fc ON fc.film_id = uf.film_id
+            ORDER BY fc.country_code
+            """,
+            (user_id,),
+        )
+        country_options = [
+            {'code': str(row[0]), 'name': _country_name(row[0]) or str(row[0])}
+            for row in cur.fetchall()
+            if row[0]
+        ]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT p.name
+            FROM latest_user_films uf
+            JOIN film_people fp ON fp.film_id = uf.film_id AND fp.role = 'director'
+            JOIN people p ON p.id = fp.person_id
+            ORDER BY p.name
+            """,
+            (user_id,),
+        )
+        directors = [str(row[0]) for row in cur.fetchall() if row[0]]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT DISTINCT p.name
+            FROM latest_user_films uf
+            JOIN film_people fp ON fp.film_id = uf.film_id AND fp.role = 'actor'
+            JOIN people p ON p.id = fp.person_id
+            ORDER BY p.name
+            """,
+            (user_id,),
+        )
+        actors = [str(row[0]) for row in cur.fetchall() if row[0]]
+
+        cur.execute(
+            f"""
+            {LATEST_USER_FILMS_CTE}
+            SELECT MIN(f.runtime_min)::INT, MAX(f.runtime_min)::INT
+            FROM latest_user_films uf
+            JOIN films f ON f.id = uf.film_id
+            WHERE f.runtime_min IS NOT NULL
+            """,
+            (user_id,),
+        )
+        runtime_row = cur.fetchone()
+
+    return {
+        'personal_ratings': [value for value in personal_ratings if value is not None],
+        'letterboxd_ratings': [value for value in letterboxd_ratings if value is not None],
+        'watched_years': watched_years,
+        'watched_months': watched_months,
+        'release_years': release_years,
+        'release_decades': release_decades,
+        'genres': genres,
+        'countries': [item['name'] for item in country_options],
+        'country_options': country_options,
+        'directors': directors,
+        'actors': actors,
+        'runtime': {
+            'min': int(runtime_row[0]) if runtime_row and runtime_row[0] is not None else None,
+            'max': int(runtime_row[1]) if runtime_row and runtime_row[1] is not None else None,
+        },
+    }
+
 
 
 def get_filtered_films(
@@ -1426,5 +1662,7 @@ __all__ = [
     "get_country_rankings",
     "get_genre_rankings",
     "get_people_rankings",
+    "get_watchlist_films",
+    "get_filter_options",
     "get_filtered_films",
 ]

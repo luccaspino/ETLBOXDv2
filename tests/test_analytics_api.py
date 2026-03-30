@@ -55,3 +55,97 @@ def test_genre_rankings_best_rated_requires_existing_user(client, monkeypatch) -
 
     assert response.status_code == 404
     assert response.json()['detail'] == "Usuario 'ghost-user' nao encontrado."
+
+
+def test_watchlist_route_returns_enriched_items(client, monkeypatch) -> None:
+    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(
+        analytics_route,
+        'get_watchlist_films',
+        lambda user_id: [
+            {
+                'film_id': 11,
+                'title': 'Cure',
+                'year': 1997,
+                'runtime_min': 111,
+                'original_language': 'ja',
+                'tagline': 'Maddeningly brilliant.',
+                'poster_url': 'https://img/cure.jpg',
+                'letterboxd_url': 'https://letterboxd.com/film/cure/',
+                'letterboxd_avg_rating': 4.2,
+                'director': 'Kiyoshi Kurosawa',
+                'genres': 'Crime, Horror, Mystery',
+                'cast_top3': 'Koji Yakusho | Masato Hagiwara | Tsuyoshi Ujiki',
+                'added_date': '2026-03-30',
+            }
+        ],
+    )
+
+    response = client.get('/analytics/watchlist', params={'username': 'ppino'})
+
+    assert response.status_code == 200
+    assert response.json()[0]['title'] == 'Cure'
+    assert response.json()[0]['director'] == 'Kiyoshi Kurosawa'
+
+
+def test_filters_options_route_returns_dropdown_payload(client, monkeypatch) -> None:
+    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(
+        analytics_route,
+        'get_filter_options',
+        lambda user_id: {
+            'personal_ratings': [3.5, 4.0, 4.5],
+            'letterboxd_ratings': [3.2, 3.8, 4.4],
+            'watched_years': [2026, 2025],
+            'watched_months': [1, 7, 12],
+            'release_years': [2024, 2019, 1997],
+            'release_decades': [1990, 2010, 2020],
+            'genres': ['Drama', 'Thriller'],
+            'countries': ['Japan', 'United States'],
+            'country_options': [
+                {'code': 'JP', 'name': 'Japan'},
+                {'code': 'US', 'name': 'United States'},
+            ],
+            'directors': ['David Fincher'],
+            'actors': ['Jake Gyllenhaal'],
+            'runtime': {'min': 85, 'max': 180},
+        },
+    )
+
+    response = client.get('/analytics/filters/options', params={'username': 'ppino'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['personal_ratings'] == [3.5, 4.0, 4.5]
+    assert payload['letterboxd_ratings'] == [3.2, 3.8, 4.4]
+    assert payload['release_years'] == [2024, 2019, 1997]
+    assert payload['release_decades'] == [1990, 2010, 2020]
+    assert payload['country_options'][0] == {'code': 'JP', 'name': 'Japan'}
+    assert payload['runtime'] == {'min': 85, 'max': 180}
+
+
+def test_films_route_includes_poster_url_for_collage(client, monkeypatch) -> None:
+    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(
+        analytics_route,
+        'get_filtered_films',
+        lambda user_id, **filters: [
+            {
+                'film_id': 99,
+                'title': 'Possession',
+                'year': 1981,
+                'runtime_min': 124,
+                'user_rating': 4.5,
+                'letterboxd_avg_rating': 4.1,
+                'watched_date': '2026-03-15',
+                'tagline': 'Inhuman ecstasy fulfilled.',
+                'poster_url': 'https://img/possession.jpg',
+                'letterboxd_url': 'https://letterboxd.com/film/possession/',
+            }
+        ],
+    )
+
+    response = client.get('/analytics/films', params={'username': 'ppino', 'watched_month': 3, 'watched_year': 2026})
+
+    assert response.status_code == 200
+    assert response.json()[0]['poster_url'] == 'https://img/possession.jpg'

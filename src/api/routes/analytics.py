@@ -5,15 +5,19 @@ from fastapi import APIRouter, HTTPException, Query
 from src.api.schemas import (
     CategoryRankingItem,
     CountryCountItem,
+    FilterCountryOptionItem,
     FilteredFilmItem,
+    FilterOptionsResponse,
     GenreCountItem,
     MainKpisResponse,
     MonthlyLogItem,
     PersonRankingItem,
     RandomReviewItem,
     RatingDistributionItem,
+    RuntimeRangeItem,
     RatingGapResponse,
     ReleaseYearResponse,
+    WatchlistFilmItem,
     YearlyLogItem,
 )
 from src.db.repository import (
@@ -21,6 +25,7 @@ from src.db.repository import (
     get_country_rankings,
     get_filtered_films,
     get_genre_counts,
+    get_filter_options,
     get_genre_rankings,
     get_logs_by_month,
     get_logs_by_year,
@@ -29,6 +34,7 @@ from src.db.repository import (
     get_random_review,
     get_random_watchlist_film,
     get_rating_distribution,
+    get_watchlist_films,
     get_rating_gap_kpis,
     get_release_year_kpi,
     get_user_id_by_username,
@@ -232,6 +238,21 @@ def get_actors_best_rated(
         PersonRankingItem(**row)
         for row in get_people_rankings(user_id, role="actor", min_films=min_films, order_by="best_rated")
     ]
+
+
+@router.get("/watchlist", response_model=list[WatchlistFilmItem])
+def get_watchlist_table(username: str = Query(..., description="Username da tabela users")) -> list[WatchlistFilmItem]:
+    user_id = _require_user_id(username)
+    return [WatchlistFilmItem(**row) for row in get_watchlist_films(user_id)]
+
+
+@router.get("/filters/options", response_model=FilterOptionsResponse)
+def get_filters_options(username: str = Query(..., description="Username da tabela users")) -> FilterOptionsResponse:
+    user_id = _require_user_id(username)
+    payload = get_filter_options(user_id)
+    payload['country_options'] = [FilterCountryOptionItem(**row) for row in payload['country_options']]
+    payload['runtime'] = RuntimeRangeItem(**payload['runtime'])
+    return FilterOptionsResponse(**payload)
 
 
 @router.get("/films", response_model=list[FilteredFilmItem])

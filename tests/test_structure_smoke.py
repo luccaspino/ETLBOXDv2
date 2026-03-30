@@ -17,3 +17,5 @@ def test_api_routes_registered() -> None:
     assert "/analytics/kpis/main" in paths
     assert "/analytics/rankings/countries/most-watched" in paths
     assert "/analytics/rankings/genres/best-rated" in paths
+    assert "/analytics/watchlist" in paths
+    assert "/analytics/filters/options" in paths

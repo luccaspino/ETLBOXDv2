@@ -78,6 +78,7 @@ class FilteredFilmItem(BaseModel):
     letterboxd_avg_rating: float | None
     watched_date: str | None
     tagline: str | None
+    poster_url: str | None
     letterboxd_url: str
 
 
@@ -88,3 +89,44 @@ class RandomReviewItem(BaseModel):
     watched_date: str | None
     review_text: str
     letterboxd_url: str
+
+
+class WatchlistFilmItem(BaseModel):
+    film_id: int
+    title: str
+    year: int | None
+    runtime_min: int | None
+    original_language: str | None
+    tagline: str | None
+    poster_url: str | None
+    letterboxd_url: str
+    letterboxd_avg_rating: float | None
+    director: str | None
+    genres: str | None
+    cast_top3: str | None
+    added_date: str | None
+
+
+class FilterCountryOptionItem(BaseModel):
+    code: str
+    name: str
+
+
+class RuntimeRangeItem(BaseModel):
+    min: int | None
+    max: int | None
+
+
+class FilterOptionsResponse(BaseModel):
+    personal_ratings: list[float]
+    letterboxd_ratings: list[float]
+    watched_years: list[int]
+    watched_months: list[int]
+    release_years: list[int]
+    release_decades: list[int]
+    genres: list[str]
+    countries: list[str]
+    country_options: list[FilterCountryOptionItem]
+    directors: list[str]
+    actors: list[str]
+    runtime: RuntimeRangeItem
