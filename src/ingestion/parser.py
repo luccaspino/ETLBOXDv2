@@ -2,10 +2,10 @@ import zipfile
 import logging
 import pandas as pd
 import warnings
-import re
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import urlparse
+
+from src.ingestion.scraper_urls import _to_global_film_url
 
 logging.basicConfig(
     level=logging.INFO,
@@ -65,6 +65,18 @@ def _read_csv_from_zip(zf: zipfile.ZipFile, filename: str) -> pd.DataFrame:
             f"Arquivo obrigatório '{filename}' não encontrado no ZIP do Letterboxd."
         ) from err
     return _normalize_columns(df)
+
+
+def _clean_uri(uri: str | None) -> str | None:
+    if not isinstance(uri, str):
+        return None
+    cleaned = uri.strip()
+    if not cleaned:
+        return None
+    cleaned = cleaned.split("?", 1)[0].rstrip("/")
+    if not cleaned:
+        return None
+    return _to_global_film_url(cleaned)
 
 
 # ---------------------------------------------------------------------------
@@ -315,36 +327,6 @@ def _build_scrape_queue(
     existing_uris: conjunto de letterboxd_url já presentes na tabela films.
                    Passar None (padrão) assume banco vazio — scrapa tudo.
     """
-    def _clean_uri(uri: str | None) -> str | None:
-        if not isinstance(uri, str):
-            return None
-        cleaned = uri.strip()
-        if not cleaned:
-            return None
-        # Remove querystring para evitar duplicata artificial por tracking.
-        cleaned = cleaned.split("?", 1)[0].rstrip("/")
-        if not cleaned:
-            return None
-
-        # Canonicaliza URLs de review/log para URL global do filme:
-        # https://letterboxd.com/<user>/film/<slug>/ -> https://letterboxd.com/film/<slug>
-        try:
-            parsed = urlparse(cleaned)
-            host = (parsed.hostname or "").lower()
-            path = parsed.path or ""
-            film_idx = path.find("/film/")
-            if host in {"letterboxd.com", "www.letterboxd.com"} and film_idx >= 0:
-                canonical_path = path[film_idx:].rstrip("/")
-                # Remove sufixo de review/log: /film/<slug>/<n>
-                m = re.match(r"^(/film/[^/]+)(?:/\d+)?$", canonical_path)
-                if m:
-                    canonical_path = m.group(1)
-                return f"https://letterboxd.com{canonical_path}"
-        except ValueError:
-            pass
-
-        return cleaned
-
     uris_user_films = user_films_df[["film_name", "film_year", "letterboxd_uri"]].copy()
     uris_watchlist = watchlist_df[["film_name", "film_year", "letterboxd_uri"]].copy()
 
@@ -448,31 +430,3 @@ def parse_zip(
         "watchlist":    watchlist_df,
         "scrape_queue": scrape_queue,
     }
-
-
-
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 2:
-        print("Uso: python parser.py <caminho_para_o_zip>")
-        sys.exit(1)
-
-    result = parse_zip(sys.argv[1])
-
-    print("\n--- user ---")
-    print(result["user"].to_string(index=False))
-
-    print("\n--- user_films (primeiras 5 linhas) ---")
-    print(result["user_films"].head().to_string(index=False))
-
-    print("\n--- watchlist (primeiras 5 linhas) ---")
-    print(result["watchlist"].head().to_string(index=False))
-
-    print("\n--- scrape_queue (primeiras 5 linhas) ---")
-    print(result["scrape_queue"].head().to_string(index=False))
-
-    print(f"\nTotal user_films : {len(result['user_films'])}")
-    print(f"Total watchlist  : {len(result['watchlist'])}")
-    print(f"Total scrape_queue: {len(result['scrape_queue'])}")

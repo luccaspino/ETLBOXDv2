@@ -3,19 +3,6 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-class PipelineRunResponse(BaseModel):
-    films_upserted_from_scrape: int
-    user_films_loaded: int
-    watchlist_loaded: int
-
-
-class UserLookupResponse(BaseModel):
-    username: str
-    has_data: bool
-    total_filmes: int
-    total_watchlist: int
-
-
 class MainKpisResponse(BaseModel):
     total_filmes: int
     media_nota_pessoal: float | None

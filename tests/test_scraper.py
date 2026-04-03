@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from src.ingestion.scraper import _parse_film_page
+from src.ingestion.scraper_parser import _parse_film_page, _stars_to_rating
+
+
+def test_stars_to_rating_supports_legacy_mojibake_tokens() -> None:
+    assert _stars_to_rating("Film â˜…â˜…Â½") == 2.5
 
 
 def test_parse_film_page_extracts_core_fields() -> None:

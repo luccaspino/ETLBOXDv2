@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from src.api import dependencies as api_dependencies
 from src.api.routes import analytics as analytics_route
 
 
 def test_reviews_random_returns_selected_review(client, monkeypatch) -> None:
-    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
     monkeypatch.setattr(
         analytics_route,
         'get_random_review',
@@ -28,7 +29,7 @@ def test_reviews_random_returns_selected_review(client, monkeypatch) -> None:
 def test_country_rankings_most_watched_passes_filters(client, monkeypatch) -> None:
     calls: dict[str, object] = {}
 
-    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
 
     def fake_rankings(user_id: str, order_by: str, min_films: int):
         calls['user_id'] = user_id
@@ -49,7 +50,7 @@ def test_country_rankings_most_watched_passes_filters(client, monkeypatch) -> No
 
 
 def test_genre_rankings_best_rated_requires_existing_user(client, monkeypatch) -> None:
-    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: None)
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: None)
 
     response = client.get('/analytics/rankings/genres/best-rated', params={'username': 'ghost-user'})
 
@@ -58,7 +59,7 @@ def test_genre_rankings_best_rated_requires_existing_user(client, monkeypatch) -
 
 
 def test_watchlist_route_returns_enriched_items(client, monkeypatch) -> None:
-    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
     monkeypatch.setattr(
         analytics_route,
         'get_watchlist_films',
@@ -89,7 +90,7 @@ def test_watchlist_route_returns_enriched_items(client, monkeypatch) -> None:
 
 
 def test_filters_options_route_returns_dropdown_payload(client, monkeypatch) -> None:
-    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
     monkeypatch.setattr(
         analytics_route,
         'get_filter_options',
@@ -125,7 +126,7 @@ def test_filters_options_route_returns_dropdown_payload(client, monkeypatch) -> 
 
 
 def test_films_route_includes_poster_url_for_collage(client, monkeypatch) -> None:
-    monkeypatch.setattr(analytics_route, 'get_user_id_by_username', lambda username: 'user-123')
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
     monkeypatch.setattr(
         analytics_route,
         'get_filtered_films',

@@ -12,7 +12,7 @@ from src.ingestion.scraper import LetterboxdScraper
 
 
 def _pick_sample(uris: list[str], sample_size: int, seed: int) -> list[str]:
-    unique = list(dict.fromkeys([u.strip() for u in uris if u and str(u).strip()]))
+    unique = list(dict.fromkeys([uri.strip() for uri in uris if uri and str(uri).strip()]))
     if len(unique) <= sample_size:
         return unique
     rng = random.Random(seed)
@@ -45,7 +45,7 @@ def run_benchmark(zip_path: str, sample_size: int = 200, seed: int = 42) -> list
         start = time.perf_counter()
         out = scraper.scrape_many(sample)
         elapsed = time.perf_counter() - start
-        ok = sum(1 for r in out if r.ok)
+        ok = sum(1 for row in out if row.ok)
         err = len(out) - ok
         rate = (len(out) / elapsed) if elapsed > 0 else 0.0
         result = {
@@ -70,8 +70,8 @@ def run_benchmark(zip_path: str, sample_size: int = 200, seed: int = 42) -> list
 def _save_results(rows: list[dict], out_csv: str) -> None:
     if not rows:
         return
-    with open(out_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+    with open(out_csv, "w", newline="", encoding="utf-8") as file_obj:
+        writer = csv.DictWriter(file_obj, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
 

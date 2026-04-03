@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any, Iterator
+
+from src.config import get_env
 
 try:
     import psycopg
@@ -22,30 +22,14 @@ except Exception:
     HAS_PSYCOPG2 = False
 
 
-def _read_dotenv(path: str = ".env") -> dict[str, str]:
-    env: dict[str, str] = {}
-    p = Path(path)
-    if not p.exists():
-        return env
-    for line in p.read_text(encoding="utf-8").splitlines():
-        raw = line.strip()
-        if not raw or raw.startswith("#") or "=" not in raw:
-            continue
-        key, value = raw.split("=", 1)
-        env[key.strip()] = value.strip().strip('"').strip("'")
-    return env
-
-
 def get_connection(autocommit: bool = False) -> Any:
-    dotenv = _read_dotenv(".env")
-
-    database_url = os.getenv("DATABASE_URL") or dotenv.get("DATABASE_URL")
-    host = os.getenv("POSTGRES_HOST") or dotenv.get("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT") or dotenv.get("POSTGRES_PORT", "5432")
-    db = os.getenv("POSTGRES_DB") or dotenv.get("POSTGRES_DB", "letterboxd")
-    user = os.getenv("POSTGRES_USER") or dotenv.get("POSTGRES_USER", "letterboxd")
-    password = os.getenv("POSTGRES_PASSWORD") or dotenv.get("POSTGRES_PASSWORD")
-    sslmode = os.getenv("POSTGRES_SSLMODE") or dotenv.get("POSTGRES_SSLMODE", "prefer")
+    database_url = get_env("DATABASE_URL")
+    host = get_env("POSTGRES_HOST", "localhost")
+    port = get_env("POSTGRES_PORT", "5432")
+    db = get_env("POSTGRES_DB", "letterboxd")
+    user = get_env("POSTGRES_USER", "letterboxd")
+    password = get_env("POSTGRES_PASSWORD")
+    sslmode = get_env("POSTGRES_SSLMODE", "prefer")
 
     if not database_url and not password:
         raise RuntimeError("POSTGRES_PASSWORD nao definido no ambiente (.env).")
@@ -81,16 +65,8 @@ def get_connection(autocommit: bool = False) -> Any:
     raise RuntimeError("Nenhum driver PostgreSQL encontrado. Instale `psycopg` ou `psycopg2-binary`.")
 
 
-def get_read_connection() -> Any:
-    return get_connection(autocommit=False)
-
-
-def get_write_connection() -> Any:
-    return get_connection(autocommit=False)
-
-
 @contextmanager
 def get_cursor() -> Iterator[Any]:
-    with get_read_connection() as conn:
+    with get_connection() as conn:
         with conn.cursor() as cur:
             yield cur

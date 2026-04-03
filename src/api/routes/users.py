@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from src.api.schemas import UserLookupResponse
-from src.db.repository import get_user_lookup
+from src.db import get_user_lookup
 
 router = APIRouter(prefix="/users", tags=["users"])
 

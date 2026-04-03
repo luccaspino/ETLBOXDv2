@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 
-from src.db.repository import (
+from src.db import (
     fetch_existing_film_keys,
     fetch_existing_film_urls,
     load_all_to_db,
