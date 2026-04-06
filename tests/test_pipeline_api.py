@@ -34,6 +34,7 @@ def test_pipeline_run_accepts_valid_zip_with_extra_csv(client, monkeypatch) -> N
     def fake_run(**kwargs):
         assert kwargs['zip_path'].endswith('.zip')
         return {
+            'username': 'ppino',
             'films_upserted_from_scrape': 0,
             'user_films_loaded': 1170,
             'watchlist_loaded': 616,
@@ -48,6 +49,7 @@ def test_pipeline_run_accepts_valid_zip_with_extra_csv(client, monkeypatch) -> N
 
     assert response.status_code == 200
     assert response.json() == {
+        'username': 'ppino',
         'films_upserted_from_scrape': 0,
         'user_films_loaded': 1170,
         'watchlist_loaded': 616,
@@ -77,6 +79,7 @@ def test_pipeline_run_rate_limits_repeated_requests(client, monkeypatch) -> None
         pipeline_route,
         'run',
         lambda **kwargs: {
+            'username': 'ppino',
             'films_upserted_from_scrape': 0,
             'user_films_loaded': 1170,
             'watchlist_loaded': 616,

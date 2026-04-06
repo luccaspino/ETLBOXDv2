@@ -10,6 +10,7 @@ from src.api.schemas import (
     FilteredFilmItem,
     FilterOptionsResponse,
     GenreCountItem,
+    LoggedFilmItem,
     MainKpisResponse,
     MonthlyLogItem,
     PersonRankingItem,
@@ -28,6 +29,7 @@ from src.db import (
     get_genre_counts,
     get_filter_options,
     get_genre_rankings,
+    get_logged_films,
     get_logs_by_month,
     get_logs_by_year,
     get_main_kpis,
@@ -82,6 +84,40 @@ def get_monthly_logs(user_id: str = Depends(require_user_id)) -> list[MonthlyLog
 @router.get("/logs/yearly", response_model=list[YearlyLogItem])
 def get_yearly_logs(user_id: str = Depends(require_user_id)) -> list[YearlyLogItem]:
     return [YearlyLogItem(**row) for row in get_logs_by_year(user_id)]
+
+
+@router.get("/logs/films", response_model=list[LoggedFilmItem])
+def get_logged_films_table(
+    user_id: str = Depends(require_user_id),
+    min_rating: float | None = Query(None, ge=0.5, le=5.0),
+    max_rating: float | None = Query(None, ge=0.5, le=5.0),
+    min_runtime: int | None = Query(None, ge=1),
+    max_runtime: int | None = Query(None, ge=1),
+    decade_start: int | None = Query(None, ge=1880, le=2100),
+    director_name: str | None = Query(None),
+    actor_name: str | None = Query(None),
+    country_code: str | None = Query(None, min_length=2, max_length=2),
+    genre_name: str | None = Query(None),
+    watched_month: int | None = Query(None, ge=1, le=12),
+    watched_year: int | None = Query(None, ge=1880, le=2100),
+) -> list[LoggedFilmItem]:
+    return [
+        LoggedFilmItem(**row)
+        for row in get_logged_films(
+            user_id,
+            min_rating=min_rating,
+            max_rating=max_rating,
+            min_runtime=min_runtime,
+            max_runtime=max_runtime,
+            decade_start=decade_start,
+            director_name=director_name,
+            actor_name=actor_name,
+            country_code=country_code,
+            genre_name=genre_name,
+            watched_month=watched_month,
+            watched_year=watched_year,
+        )
+    ]
 
 
 @router.get("/distribution/ratings", response_model=list[RatingDistributionItem])
@@ -147,10 +183,17 @@ def get_genres_best_rated(
 def get_directors_most_watched(
     user_id: str = Depends(require_user_id),
     min_films: int = Query(1, ge=1, description="Minimo de filmes para entrar no ranking"),
+    limit: int = Query(25, ge=1, le=100, description="Quantidade maxima de diretores retornados"),
 ) -> list[PersonRankingItem]:
     return [
         PersonRankingItem(**row)
-        for row in get_people_rankings(user_id, role="director", min_films=min_films, order_by="most_watched")
+        for row in get_people_rankings(
+            user_id,
+            role="director",
+            min_films=min_films,
+            order_by="most_watched",
+            limit=limit,
+        )
     ]
 
 
@@ -158,10 +201,17 @@ def get_directors_most_watched(
 def get_directors_best_rated(
     user_id: str = Depends(require_user_id),
     min_films: int = Query(3, ge=1, description="Minimo de filmes avaliados para entrar no ranking"),
+    limit: int = Query(25, ge=1, le=100, description="Quantidade maxima de diretores retornados"),
 ) -> list[PersonRankingItem]:
     return [
         PersonRankingItem(**row)
-        for row in get_people_rankings(user_id, role="director", min_films=min_films, order_by="best_rated")
+        for row in get_people_rankings(
+            user_id,
+            role="director",
+            min_films=min_films,
+            order_by="best_rated",
+            limit=limit,
+        )
     ]
 
 
@@ -169,10 +219,17 @@ def get_directors_best_rated(
 def get_actors_most_watched(
     user_id: str = Depends(require_user_id),
     min_films: int = Query(1, ge=1, description="Minimo de filmes para entrar no ranking"),
+    limit: int = Query(25, ge=1, le=100, description="Quantidade maxima de atores retornados"),
 ) -> list[PersonRankingItem]:
     return [
         PersonRankingItem(**row)
-        for row in get_people_rankings(user_id, role="actor", min_films=min_films, order_by="most_watched")
+        for row in get_people_rankings(
+            user_id,
+            role="actor",
+            min_films=min_films,
+            order_by="most_watched",
+            limit=limit,
+        )
     ]
 
 
@@ -180,10 +237,17 @@ def get_actors_most_watched(
 def get_actors_best_rated(
     user_id: str = Depends(require_user_id),
     min_films: int = Query(3, ge=1, description="Minimo de filmes avaliados para entrar no ranking"),
+    limit: int = Query(25, ge=1, le=100, description="Quantidade maxima de atores retornados"),
 ) -> list[PersonRankingItem]:
     return [
         PersonRankingItem(**row)
-        for row in get_people_rankings(user_id, role="actor", min_films=min_films, order_by="best_rated")
+        for row in get_people_rankings(
+            user_id,
+            role="actor",
+            min_films=min_films,
+            order_by="best_rated",
+            limit=limit,
+        )
     ]
 
 

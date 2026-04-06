@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,10 +7,11 @@ from src.api.routes.analytics import router as analytics_router
 from src.api.routes.health import router as health_router
 from src.api.routes.pipeline import router as pipeline_router
 from src.api.routes.users import router as users_router
+from src.config import get_env
 
 
 def _cors_origins_from_env() -> list[str]:
-    raw = os.getenv("API_CORS_ORIGINS", "")
+    raw = get_env("API_CORS_ORIGINS", "") or ""
     origins = [item.strip() for item in raw.split(",") if item.strip()]
     return origins
 

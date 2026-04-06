@@ -346,11 +346,13 @@ def _insert_watchlist(
     film_id_by_key: dict[tuple[str, int | None], int],
     url_aliases: dict[str, str],
 ) -> int:
-    rows_to_insert: list[tuple[Any, ...]] = []
+    rows_by_film_id: dict[int, tuple[Any, ...]] = {}
+    unresolved_rows = 0
 
     for _, row in watchlist_df.iterrows():
         url = _normalize_url(row.get("letterboxd_uri"))
         if not url:
+            unresolved_rows += 1
             continue
         if url not in film_id_by_url and url in url_aliases:
             url = url_aliases[url]
@@ -361,11 +363,17 @@ def _insert_watchlist(
             if film_key is not None:
                 film_id = film_id_by_key.get(film_key)
         if film_id is None:
+            unresolved_rows += 1
             continue
 
-        rows_to_insert.append((user_id, film_id, _db_null(row.get("added_date"))))
+        added_date = _db_null(row.get("added_date"))
+        existing_row = rows_by_film_id.get(film_id)
+        if existing_row is None or (existing_row[2] is None and added_date is not None):
+            rows_by_film_id[film_id] = (user_id, film_id, added_date)
 
-    return _execute_many(
+    rows_to_insert = list(rows_by_film_id.values())
+
+    _execute_many(
         cur,
         """
         INSERT INTO watchlist (user_id, film_id, added_date)
@@ -376,6 +384,34 @@ def _insert_watchlist(
         rows_to_insert,
         chunk_size=1000,
     )
+
+    deleted_rows = 0
+    desired_film_ids = list(rows_by_film_id.keys())
+    if unresolved_rows > 0:
+        logger.warning(
+            "watchlist: %s item(ns) nao puderam ser mapeados; exclusoes foram ignoradas para evitar perda de dados.",
+            unresolved_rows,
+        )
+    elif desired_film_ids:
+        cur.execute(
+            """
+            DELETE FROM watchlist
+            WHERE user_id = %s
+              AND NOT (film_id = ANY(%s))
+            """,
+            (user_id, desired_film_ids),
+        )
+        deleted_rows = int(cur.rowcount or 0)
+    else:
+        cur.execute("DELETE FROM watchlist WHERE user_id = %s", (user_id,))
+        deleted_rows = int(cur.rowcount or 0)
+
+    logger.info(
+        "watchlist: %s item(ns) sincronizados, %s item(ns) removidos.",
+        len(rows_to_insert),
+        deleted_rows,
+    )
+    return len(rows_to_insert)
 
 
 def _fetch_all_film_ids(cur: Any) -> tuple[dict[str, int], dict[tuple[str, int | None], int]]:
@@ -426,8 +462,9 @@ def _fetch_user_collection_totals(cur: Any, user_id: str) -> tuple[int, int]:
 def load_all_to_db(
     parsed: dict[str, pd.DataFrame],
     scrape_results: list[FilmScrapeResult],
-) -> dict[str, int]:
+) -> dict[str, int | str]:
     logger.info("DB: iniciando transacao de carga...")
+    username = str(parsed["user"].iloc[0]["username"]).strip()
     with get_connection() as conn:
         with conn.cursor() as cur:
             user_id = _upsert_user(cur, parsed["user"])
@@ -485,6 +522,7 @@ def load_all_to_db(
         total_watchlist_loaded,
     )
     stats = {
+        "username": username,
         "films_upserted_from_scrape": films_upserted_from_scrape,
         "user_films_loaded": total_filmes_loaded,
         "watchlist_loaded": total_watchlist_loaded,

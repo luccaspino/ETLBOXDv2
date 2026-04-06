@@ -25,7 +25,7 @@ def run(
     retry_failed_passes: int = 6,
     require_complete_scrape: bool = True,
     max_failed_ratio: float = 0.0,
-) -> dict:
+) -> dict[str, int | str]:
     started_at = time.perf_counter()
     logging.info("Pipeline iniciado para ZIP: %s", zip_path)
 

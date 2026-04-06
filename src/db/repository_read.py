@@ -430,6 +430,7 @@ def _get_category_rankings(
     category: str,
     order_by: str = "most_watched",
     min_films: int = 1,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     order_sql_map = {
         "most_watched": "filmes_assistidos DESC, media_nota_pessoal DESC, nome",
@@ -454,6 +455,10 @@ def _get_category_rankings(
         raise ValueError(f"Ordenacao de ranking nao suportada: {order_by}")
 
     rating_filter = "WHERE uf.rating IS NOT NULL" if order_by == "best_rated" else ""
+    limit_sql = "LIMIT %s" if limit is not None else ""
+    params: list[Any] = [user_id, min_films]
+    if limit is not None:
+        params.append(limit)
 
     with get_cursor() as cur:
         cur.execute(
@@ -469,8 +474,9 @@ def _get_category_rankings(
             GROUP BY 1
             HAVING COUNT(DISTINCT uf.film_id) >= %s
             ORDER BY {order_sql}
+            {limit_sql}
             """,
-            (user_id, min_films),
+            params,
         )
         rows = cur.fetchall()
 
@@ -493,12 +499,14 @@ def get_country_rankings(
     *,
     order_by: str = "most_watched",
     min_films: int = 1,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     return _get_category_rankings(
         user_id,
         category="country",
         order_by=order_by,
         min_films=min_films,
+        limit=limit,
     )
 
 
@@ -507,12 +515,14 @@ def get_genre_rankings(
     *,
     order_by: str = "most_watched",
     min_films: int = 1,
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     return _get_category_rankings(
         user_id,
         category="genre",
         order_by=order_by,
         min_films=min_films,
+        limit=limit,
     )
 
 
@@ -522,6 +532,7 @@ def get_people_rankings(
     role: str,
     min_films: int = 3,
     order_by: str = "most_watched",
+    limit: int | None = None,
 ) -> list[dict[str, Any]]:
     order_sql_map = {
         "most_watched": "filmes_assistidos DESC, media_nota_pessoal DESC, p.name",
@@ -533,6 +544,10 @@ def get_people_rankings(
     order_sql = order_sql_map.get(order_by)
     if order_sql is None:
         raise ValueError(f"Ordenacao de ranking nao suportada: {order_by}")
+    limit_sql = "LIMIT %s" if limit is not None else ""
+    params: list[Any] = [user_id, role, min_films]
+    if limit is not None:
+        params.append(limit)
 
     with get_cursor() as cur:
         cur.execute(
@@ -549,8 +564,9 @@ def get_people_rankings(
             GROUP BY p.name
             HAVING COUNT(DISTINCT uf.film_id) >= %s
             ORDER BY {order_sql}
+            {limit_sql}
             """,
-            (user_id, role, min_films),
+            params,
         )
         rows = cur.fetchall()
 
@@ -640,6 +656,30 @@ def _serialize_filtered_films(rows: list[tuple[Any, ...]]) -> list[dict[str, Any
         }
         for row in rows
     ]
+
+
+def _serialize_logged_films(rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        genres = [str(item) for item in (row[10] or []) if item]
+        countries = [country_name(item) or str(item) for item in (row[11] or []) if item]
+        output.append(
+            {
+                "film_id": int(row[0]),
+                "title": row[1],
+                "year": row[2],
+                "runtime_min": row[3],
+                "user_rating": _normalize_number(row[4]),
+                "letterboxd_avg_rating": _normalize_number(row[5]),
+                "watched_date": str(row[6]) if row[6] is not None else None,
+                "tagline": row[7],
+                "poster_url": row[8],
+                "letterboxd_url": row[9],
+                "genres": genres,
+                "countries": countries,
+            }
+        )
+    return output
 
 
 def get_watchlist_films(user_id: str) -> list[dict[str, Any]]:
@@ -903,3 +943,78 @@ def get_filtered_films(
         watched_year=watched_year,
     )
     return _serialize_filtered_films(rows)
+
+
+def get_logged_films(
+    user_id: str,
+    *,
+    min_rating: float | None = None,
+    max_rating: float | None = None,
+    min_runtime: int | None = None,
+    max_runtime: int | None = None,
+    decade_start: int | None = None,
+    director_name: str | None = None,
+    actor_name: str | None = None,
+    country_code: str | None = None,
+    genre_name: str | None = None,
+    watched_month: int | None = None,
+    watched_year: int | None = None,
+) -> list[dict[str, Any]]:
+    where_sql, params = _build_filtered_clause(
+        user_id,
+        min_rating=min_rating,
+        max_rating=max_rating,
+        min_runtime=min_runtime,
+        max_runtime=max_runtime,
+        decade_start=decade_start,
+        director_name=director_name,
+        actor_name=actor_name,
+        country_code=country_code,
+        genre_name=genre_name,
+        watched_month=watched_month,
+        watched_year=watched_year,
+        include_user_id=True,
+    )
+
+    with get_cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT
+                f.id AS film_id,
+                f.title,
+                f.year,
+                f.runtime_min,
+                uf.rating AS user_rating,
+                f.letterboxd_avg_rating,
+                uf.watched_date,
+                f.tagline,
+                f.poster_url,
+                f.letterboxd_url,
+                genres.genres,
+                countries.country_codes
+            FROM user_films uf
+            JOIN films f ON f.id = uf.film_id
+            LEFT JOIN LATERAL (
+                SELECT ARRAY_AGG(g.name ORDER BY g.name) AS genres
+                FROM film_genres fg
+                JOIN genres g ON g.id = fg.genre_id
+                WHERE fg.film_id = f.id
+            ) genres ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT ARRAY_AGG(fc.country_code ORDER BY fc.country_code) AS country_codes
+                FROM film_countries fc
+                WHERE fc.film_id = f.id
+            ) countries ON TRUE
+            WHERE {where_sql}
+              AND uf.watched_date IS NOT NULL
+            ORDER BY
+                uf.watched_date DESC,
+                COALESCE(uf.log_date, uf.watched_date) DESC,
+                f.title,
+                uf.id DESC
+            """,
+            params,
+        )
+        rows = cur.fetchall()
+
+    return _serialize_logged_films(rows)

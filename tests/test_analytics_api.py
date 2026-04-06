@@ -150,3 +150,39 @@ def test_films_route_includes_poster_url_for_collage(client, monkeypatch) -> Non
 
     assert response.status_code == 200
     assert response.json()[0]['poster_url'] == 'https://img/possession.jpg'
+
+
+def test_logs_films_route_returns_history_rows_for_collage(client, monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
+
+    def fake_logged_films(user_id: str, **filters):
+        calls['user_id'] = user_id
+        calls['filters'] = filters
+        return [
+            {
+                'film_id': 99,
+                'title': 'Possession',
+                'year': 1981,
+                'runtime_min': 124,
+                'user_rating': 4.5,
+                'letterboxd_avg_rating': 4.1,
+                'watched_date': '2026-03-15',
+                'tagline': 'Inhuman ecstasy fulfilled.',
+                'poster_url': 'https://img/possession.jpg',
+                'letterboxd_url': 'https://letterboxd.com/film/possession/',
+                'genres': ['Drama', 'Horror'],
+                'countries': ['France', 'West Germany'],
+            }
+        ]
+
+    monkeypatch.setattr(analytics_route, 'get_logged_films', fake_logged_films)
+
+    response = client.get('/analytics/logs/films', params={'username': 'ppino', 'watched_year': 2026})
+
+    assert response.status_code == 200
+    assert response.json()[0]['poster_url'] == 'https://img/possession.jpg'
+    assert response.json()[0]['genres'] == ['Drama', 'Horror']
+    assert response.json()[0]['countries'] == ['France', 'West Germany']
+    assert calls == {'user_id': 'user-123', 'filters': {'min_rating': None, 'max_rating': None, 'min_runtime': None, 'max_runtime': None, 'decade_start': None, 'director_name': None, 'actor_name': None, 'country_code': None, 'genre_name': None, 'watched_month': None, 'watched_year': 2026}}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MainKpisResponse(BaseModel):
@@ -67,6 +67,11 @@ class FilteredFilmItem(BaseModel):
     tagline: str | None
     poster_url: str | None
     letterboxd_url: str
+
+
+class LoggedFilmItem(FilteredFilmItem):
+    genres: list[str] = Field(default_factory=list)
+    countries: list[str] = Field(default_factory=list)
 
 
 class RandomReviewItem(BaseModel):

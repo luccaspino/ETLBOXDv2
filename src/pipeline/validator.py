@@ -25,7 +25,7 @@ _MAX_ARCHIVE_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 
 
 def get_max_zip_bytes() -> int:
-    return get_int_env("PIPELINE_MAX_ZIP_MB", 25, min_value=1) * 1024 * 1024
+    return get_int_env("PIPELINE_MAX_ZIP_MB", 2, min_value=1) * 1024 * 1024
 
 
 def validate_request_size(request: Request) -> None:
