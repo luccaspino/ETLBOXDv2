@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
 from src.ingestion.scraper import FilmScrapeResult, LetterboxdScraper
 from src.ingestion.scraper_parser import _parse_film_page, _stars_to_rating
 
@@ -201,3 +203,38 @@ def test_scrape_many_logs_startup_progress(monkeypatch, caplog) -> None:
 
     assert len(results) == 2
     assert "scraping: iniciado | total=2 | workers=4 | timeout=8s | retries=1 | progress_every=10" in caplog.text
+
+
+def test_scraper_uses_pooled_httpx_clients(monkeypatch) -> None:
+    scraper = LetterboxdScraper(max_workers=2)
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def __init__(self, url: str) -> None:
+            self.text = "<html></html>"
+            self.url = url
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, **kwargs) -> None:
+            captured["limits"] = kwargs.get("limits")
+            captured["follow_redirects"] = kwargs.get("follow_redirects")
+            captured["headers"] = kwargs.get("headers")
+
+        def get(self, url: str) -> FakeResponse:
+            return FakeResponse("https://letterboxd.com/film/test-film/")
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("src.ingestion.scraper.httpx.Client", FakeClient)
+
+    html, final_url = scraper._fetch_html("https://boxd.it/test")
+    scraper.close()
+
+    assert html == "<html></html>"
+    assert final_url == "https://letterboxd.com/film/test-film/"
+    assert captured["follow_redirects"] is True
+    assert isinstance(captured["limits"], httpx.Limits)

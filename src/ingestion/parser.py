@@ -55,11 +55,23 @@ def _parse_date(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce").dt.date
 
 
-def _read_csv_from_zip(zf: zipfile.ZipFile, filename: str) -> pd.DataFrame:
+def _normalize_column_name(name: str) -> str:
+    return str(name).strip().lower().replace(" ", "_")
+
+
+def _read_csv_from_zip(
+    zf: zipfile.ZipFile,
+    filename: str,
+    usecols: list[str] | None = None,
+) -> pd.DataFrame:
     """Lê um CSV de dentro do ZIP e já normaliza as colunas."""
     try:
         with zf.open(filename) as f:
-            df = pd.read_csv(f, dtype=str)
+            normalized_usecols = {_normalize_column_name(col) for col in usecols} if usecols else None
+            reader_usecols = None
+            if normalized_usecols:
+                reader_usecols = lambda col: _normalize_column_name(col) in normalized_usecols
+            df = pd.read_csv(f, dtype=str, usecols=reader_usecols)
     except KeyError as err:
         raise FileNotFoundError(
             f"Arquivo obrigatório '{filename}' não encontrado no ZIP do Letterboxd."
@@ -90,7 +102,11 @@ def _parse_profile(zf: zipfile.ZipFile) -> pd.DataFrame:
     Colunas usadas: username, given_name, family_name, email_address, date_joined
     Colunas ignoradas: location, website, bio, pronoun, favorite_films
     """
-    df = _read_csv_from_zip(zf, "profile.csv")
+    df = _read_csv_from_zip(
+        zf,
+        "profile.csv",
+        usecols=["username", "given_name", "family_name", "email_address", "date_joined"],
+    )
     _require_columns(df, "profile.csv", ["username", "date_joined"])
 
     user_df = pd.DataFrame({
@@ -116,7 +132,11 @@ def _parse_diary(zf: zipfile.ZipFile) -> pd.DataFrame:
     URIs aqui são longas (ex: https://boxd.it/4xZFbP) — usadas como
     chave de cache para o scraper.
     """
-    df = _read_csv_from_zip(zf, "diary.csv")
+    df = _read_csv_from_zip(
+        zf,
+        "diary.csv",
+        usecols=["name", "year", "letterboxd_uri", "rating", "watched_date", "date", "rewatch", "tags"],
+    )
     _require_columns(
         df,
         "diary.csv",
@@ -149,7 +169,11 @@ def _parse_ratings(zf: zipfile.ZipFile) -> pd.DataFrame:
 
     rating_date representa a data da nota atual consolidada no export.
     """
-    df = _read_csv_from_zip(zf, "ratings.csv")
+    df = _read_csv_from_zip(
+        zf,
+        "ratings.csv",
+        usecols=["name", "year", "letterboxd_uri", "rating", "date"],
+    )
     _require_columns(df, "ratings.csv", ["name", "year", "letterboxd_uri", "rating"])
 
     ratings_df = pd.DataFrame({
@@ -172,7 +196,11 @@ def _parse_reviews(zf: zipfile.ZipFile) -> pd.DataFrame:
     Chave de join com user_films: letterboxd_uri + watched_date
     (ambos no mesmo formato longo de URI do diary).
     """
-    df = _read_csv_from_zip(zf, "reviews.csv")
+    df = _read_csv_from_zip(
+        zf,
+        "reviews.csv",
+        usecols=["letterboxd_uri", "watched_date", "review"],
+    )
     _require_columns(df, "reviews.csv", ["letterboxd_uri", "watched_date", "review"])
 
     reviews_df = pd.DataFrame({
@@ -191,7 +219,11 @@ def _parse_watchlist(zf: zipfile.ZipFile) -> pd.DataFrame:
 
     URIs aqui são curtas (mesmo formato do ratings.csv).
     """
-    df = _read_csv_from_zip(zf, "watchlist.csv")
+    df = _read_csv_from_zip(
+        zf,
+        "watchlist.csv",
+        usecols=["name", "year", "letterboxd_uri", "date"],
+    )
     _require_columns(df, "watchlist.csv", ["name", "year", "letterboxd_uri", "date"])
 
     watchlist_df = pd.DataFrame({

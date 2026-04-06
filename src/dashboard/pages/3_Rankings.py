@@ -8,6 +8,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.dashboard.api_client import ApiClientError, get_filtered_films, get_rankings_bundle
 from src.dashboard.branding import configure_page, render_sidebar_nav
@@ -35,6 +36,7 @@ if not username:
     st.stop()
 
 st.session_state.setdefault("ranking_drilldown", None)
+st.session_state.setdefault("ranking_pending_scroll", False)
 
 ranking_sections = [
     ("directors", "Diretores"),
@@ -43,12 +45,31 @@ ranking_sections = [
     ("languages", "Idiomas originais"),
 ]
 
+RELATED_FILMS_ANCHOR_ID = "ranking-related-films-anchor"
+
 
 def _set_drilldown(category_key: str, item_name: str) -> None:
     st.session_state["ranking_drilldown"] = {
         "category": category_key,
         "name": item_name,
     }
+    st.session_state["ranking_pending_scroll"] = True
+
+
+def _scroll_to_related_films() -> None:
+    components.html(
+        f"""
+        <script>
+        const target = window.parent.document.getElementById("{RELATED_FILMS_ANCHOR_ID}");
+        if (target) {{
+            window.parent.requestAnimationFrame(() => {{
+                target.scrollIntoView({{ behavior: "smooth", block: "start" }});
+            }});
+        }}
+        </script>
+        """,
+        height=0,
+    )
 
 
 def _render_ranking_list(title: str, rows: list[dict], category_key: str, *, key_prefix: str) -> None:
@@ -138,7 +159,11 @@ if drilldown:
             filter_payload["original_language"] = selected_name
 
         st.markdown("---")
+        st.markdown(f'<div id="{RELATED_FILMS_ANCHOR_ID}"></div>', unsafe_allow_html=True)
         st.subheader(f"Filmes relacionados: {selected_name}")
+        if st.session_state.get("ranking_pending_scroll"):
+            _scroll_to_related_films()
+            st.session_state["ranking_pending_scroll"] = False
 
         if not filter_payload:
             render_empty_state(

@@ -8,10 +8,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
-from http.client import IncompleteRead, RemoteDisconnected
 from typing import Iterable
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+import httpx
 
 from src.ingestion.scraper_parser import _is_review_like_page, _looks_like_review_title, _parse_film_page
 from src.ingestion.scraper_urls import _is_letterboxd_url, _normalize_film_url, _to_global_film_url
@@ -20,11 +19,8 @@ logger = logging.getLogger(__name__)
 
 RETRYABLE_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
 TRANSIENT_FETCH_ERRORS = (
-    URLError,
     TimeoutError,
     OSError,
-    IncompleteRead,
-    RemoteDisconnected,
 )
 
 
@@ -92,20 +88,50 @@ class LetterboxdScraper:
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/122.0.0.0 Safari/537.36"
         )
+        self._client_local = threading.local()
+        self._clients_lock = threading.Lock()
+        self._clients_to_close: list[httpx.Client] = []
 
-    def _fetch_html(self, url: str) -> tuple[str, str]:
-        self._rate_limiter.acquire()
-        request = Request(
-            url=url,
+    def _build_http_client(self) -> httpx.Client:
+        return httpx.Client(
+            timeout=httpx.Timeout(self.timeout_s),
+            limits=httpx.Limits(
+                max_connections=max(20, self.max_workers * 2),
+                max_keepalive_connections=max(10, self.max_workers),
+                keepalive_expiry=30.0,
+            ),
+            follow_redirects=True,
             headers={
                 "User-Agent": self._user_agent,
                 "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8",
             },
         )
-        with urlopen(request, timeout=self.timeout_s) as response:
-            charset = response.headers.get_content_charset() or "utf-8"
-            html = response.read().decode(charset, errors="replace")
-            return html, response.geturl()
+
+    def _get_http_client(self) -> httpx.Client:
+        client = getattr(self._client_local, "client", None)
+        if client is None:
+            client = self._build_http_client()
+            self._client_local.client = client
+            with self._clients_lock:
+                self._clients_to_close.append(client)
+        return client
+
+    def close(self) -> None:
+        with self._clients_lock:
+            clients = list(self._clients_to_close)
+            self._clients_to_close.clear()
+
+        for client in clients:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+    def _fetch_html(self, url: str) -> tuple[str, str]:
+        self._rate_limiter.acquire()
+        response = self._get_http_client().get(url)
+        response.raise_for_status()
+        return response.text, str(response.url)
 
     def _retry_sleep(self, attempt: int) -> None:
         if self.retry_backoff_s <= 0:
@@ -167,12 +193,22 @@ class LetterboxdScraper:
                                 attempts=attempt,
                             )
                 return result
-            except HTTPError as err:
-                if err.code not in RETRYABLE_HTTP_STATUS or attempt >= attempts:
+            except httpx.HTTPStatusError as err:
+                status_code = err.response.status_code
+                if status_code not in RETRYABLE_HTTP_STATUS or attempt >= attempts:
                     return FilmScrapeResult(
                         letterboxd_url=url,
                         requested_url=url,
-                        scrape_error=f"HTTP {err.code}",
+                        scrape_error=f"HTTP {status_code}",
+                        attempts=attempt,
+                    )
+                self._retry_sleep(attempt)
+            except httpx.RequestError as err:
+                if attempt >= attempts:
+                    return FilmScrapeResult(
+                        letterboxd_url=url,
+                        requested_url=url,
+                        scrape_error=str(err),
                         attempts=attempt,
                     )
                 self._retry_sleep(attempt)
@@ -229,38 +265,41 @@ class LetterboxdScraper:
             self.progress_every,
         )
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_idx = {executor.submit(self.scrape_one, uri): i for i, uri in enumerate(uri_list)}
-            for future in as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                try:
-                    result = future.result()
-                except Exception as err_msg:
-                    result = FilmScrapeResult(
-                        letterboxd_url=uri_list[idx],
-                        requested_url=uri_list[idx],
-                        scrape_error=f"future error: {err_msg}",
-                    )
-                out[idx] = result
-                done += 1
-                if result.ok:
-                    ok += 1
-                else:
-                    err += 1
+        try:
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                future_to_idx = {executor.submit(self.scrape_one, uri): i for i, uri in enumerate(uri_list)}
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    try:
+                        result = future.result()
+                    except Exception as err_msg:
+                        result = FilmScrapeResult(
+                            letterboxd_url=uri_list[idx],
+                            requested_url=uri_list[idx],
+                            scrape_error=f"future error: {err_msg}",
+                        )
+                    out[idx] = result
+                    done += 1
+                    if result.ok:
+                        ok += 1
+                    else:
+                        err += 1
 
-                if done % self.progress_every == 0 or done == total:
-                    elapsed = max(1e-6, time.perf_counter() - started)
-                    rate = done / elapsed
-                    eta = (total - done) / rate if rate > 0 else 0.0
-                    logger.info(
-                        "scraping: %s/%s | ok=%s erro=%s | %.2f url/s | ETA %.1fs",
-                        done,
-                        total,
-                        ok,
-                        err,
-                        rate,
-                        eta,
-                    )
+                    if done % self.progress_every == 0 or done == total:
+                        elapsed = max(1e-6, time.perf_counter() - started)
+                        rate = done / elapsed
+                        eta = (total - done) / rate if rate > 0 else 0.0
+                        logger.info(
+                            "scraping: %s/%s | ok=%s erro=%s | %.2f url/s | ETA %.1fs",
+                            done,
+                            total,
+                            ok,
+                            err,
+                            rate,
+                            eta,
+                        )
+        finally:
+            self.close()
 
         return [row for row in out if row is not None]
 

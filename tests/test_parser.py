@@ -75,3 +75,49 @@ def test_parse_zip_filters_existing() -> None:
     queued = set(result["scrape_queue"]["letterboxd_uri"].tolist())
     assert "https://letterboxd.com/film/film-a" not in queued
     assert "https://boxd.it/cccc" not in queued
+
+
+def test_parse_zip_accepts_mixed_case_headers_with_usecols() -> None:
+    mem = BytesIO()
+    with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "profile.csv",
+            _csv([
+                [" USERNAME ", "Date Joined", "Given Name", "Ignored Column"],
+                ["ppino", "2024-01-01", "Lucca", "x"],
+            ]),
+        )
+        zf.writestr(
+            "diary.csv",
+            _csv([
+                ["Name", "Year", "Letterboxd URI", "Rating", "Watched Date", "Date", "Rewatch", "Tags", "Unused"],
+                ["Film A", "2020", "https://letterboxd.com/film/film-a", "", "2026-01-10", "2026-01-10", "NO", "tag1", "x"],
+            ]),
+        )
+        zf.writestr(
+            "ratings.csv",
+            _csv([
+                ["Name", "Year", "Letterboxd URI", "Rating", "Date", "Ignored"],
+                ["Film B", "2021", "https://boxd.it/bbbb", "3.5", "2026-01-11", "x"],
+            ]),
+        )
+        zf.writestr(
+            "reviews.csv",
+            _csv([
+                ["Letterboxd URI", "Watched Date", "Review", "Ignored"],
+                ["https://letterboxd.com/film/film-a", "2026-01-10", "Great", "x"],
+            ]),
+        )
+        zf.writestr(
+            "watchlist.csv",
+            _csv([
+                ["Name", "Year", "Letterboxd URI", "Date", "Ignored"],
+                ["Film C", "2022", "https://boxd.it/cccc", "2026-02-01", "x"],
+            ]),
+        )
+
+    result = parse_zip(mem.getvalue())
+
+    assert result["user"].iloc[0]["username"] == "ppino"
+    assert len(result["user_films"]) == 2
+    assert len(result["watchlist"]) == 1
