@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from src.ingestion.scraper import FilmScrapeResult, LetterboxdScraper
 from src.ingestion.scraper_parser import _parse_film_page, _stars_to_rating
 
@@ -127,3 +129,18 @@ def test_scrape_one_retries_connection_reset_error(monkeypatch) -> None:
     assert result.title == "Test Film"
     assert result.attempts == 2
     assert fetch_calls["count"] == 2
+
+
+def test_scrape_many_logs_startup_progress(monkeypatch, caplog) -> None:
+    scraper = LetterboxdScraper(max_workers=4, timeout_s=8, retries=1, progress_every=10)
+    monkeypatch.setattr(
+        scraper,
+        "scrape_one",
+        lambda uri: FilmScrapeResult(letterboxd_url=str(uri), requested_url=str(uri), title="Test Film"),
+    )
+
+    with caplog.at_level(logging.INFO):
+        results = scraper.scrape_many(["https://boxd.it/a", "https://boxd.it/b"])
+
+    assert len(results) == 2
+    assert "scraping: iniciado | total=2 | workers=4 | timeout=8s | retries=1 | progress_every=10" in caplog.text

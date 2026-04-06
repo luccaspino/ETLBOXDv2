@@ -70,7 +70,7 @@ def run_pipeline(
     retries: int = Form(1),
     retry_backoff: float = Form(0.25),
     request_interval: float = Form(0.01),
-    progress_every: int = Form(100),
+    progress_every: int = Form(10),
     auto_retry_failed: bool = Form(True),
     retry_failed_passes: int = Form(6),
     allow_partial: bool = Form(False),

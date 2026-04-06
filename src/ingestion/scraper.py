@@ -203,6 +203,15 @@ class LetterboxdScraper:
         done = ok = err = 0
         out: list[FilmScrapeResult | None] = [None] * total
 
+        logger.info(
+            "scraping: iniciado | total=%s | workers=%s | timeout=%ss | retries=%s | progress_every=%s",
+            total,
+            self.max_workers,
+            self.timeout_s,
+            self.retries,
+            self.progress_every,
+        )
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             future_to_idx = {executor.submit(self.scrape_one, uri): i for i, uri in enumerate(uri_list)}
             for future in as_completed(future_to_idx):
