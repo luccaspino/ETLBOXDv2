@@ -114,6 +114,16 @@ class LetterboxdScraper:
         jitter = random.uniform(0.0, self.retry_backoff_s)
         time.sleep(backoff + jitter)
 
+    def _can_use_review_fallback(self, result: FilmScrapeResult) -> bool:
+        title = (result.title or "").strip()
+        low = title.lower()
+        is_review_title = (
+            _looks_like_review_title(title)
+            or low.startswith("review of ")
+            or low.startswith("diary entry for ")
+        )
+        return bool(title) and not is_review_title
+
     def scrape_one(self, uri: str) -> FilmScrapeResult:
         url = _normalize_film_url(uri)
         if not _is_letterboxd_url(url):
@@ -143,6 +153,13 @@ class LetterboxdScraper:
                     except Exception as err:
                         logger.debug("fallback canonical fetch falhou para %s: %s", url, err)
                         if must_refetch_canonical:
+                            if self._can_use_review_fallback(result):
+                                result.letterboxd_url = global_film_url
+                                logger.debug(
+                                    "usando dados do review/log para %s apos falha no fetch canônico",
+                                    url,
+                                )
+                                return result
                             return FilmScrapeResult(
                                 letterboxd_url=global_film_url,
                                 requested_url=url,

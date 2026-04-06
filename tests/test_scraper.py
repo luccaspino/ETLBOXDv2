@@ -131,6 +131,63 @@ def test_scrape_one_retries_connection_reset_error(monkeypatch) -> None:
     assert fetch_calls["count"] == 2
 
 
+def test_scrape_one_reuses_review_page_data_when_canonical_fetch_fails(monkeypatch) -> None:
+    scraper = LetterboxdScraper(retries=0)
+    fetch_calls = {"count": 0}
+
+    def fake_fetch_html(url: str) -> tuple[str, str]:
+        fetch_calls["count"] += 1
+        if fetch_calls["count"] == 1:
+            return ("<html></html>", "https://letterboxd.com/user/film/test-film/")
+        raise ConnectionResetError(104, "Connection reset by peer")
+
+    def fake_parse_film_page(final_url: str, html: str) -> FilmScrapeResult:
+        return FilmScrapeResult(
+            letterboxd_url="https://letterboxd.com/user/film/test-film/",
+            title="Test Film",
+        )
+
+    monkeypatch.setattr(scraper, "_fetch_html", fake_fetch_html)
+    monkeypatch.setattr("src.ingestion.scraper._parse_film_page", fake_parse_film_page)
+
+    result = scraper.scrape_one("https://boxd.it/test")
+
+    assert result.ok
+    assert result.title == "Test Film"
+    assert result.letterboxd_url == "https://letterboxd.com/film/test-film"
+    assert result.requested_url == "https://boxd.it/test"
+    assert result.attempts == 1
+    assert fetch_calls["count"] == 2
+
+
+def test_scrape_one_keeps_failing_when_review_title_cannot_be_cleaned(monkeypatch) -> None:
+    scraper = LetterboxdScraper(retries=0)
+    fetch_calls = {"count": 0}
+
+    def fake_fetch_html(url: str) -> tuple[str, str]:
+        fetch_calls["count"] += 1
+        if fetch_calls["count"] == 1:
+            return ("<html></html>", "https://letterboxd.com/user/film/test-film/")
+        raise ConnectionResetError(104, "Connection reset by peer")
+
+    def fake_parse_film_page(final_url: str, html: str) -> FilmScrapeResult:
+        return FilmScrapeResult(
+            letterboxd_url="https://letterboxd.com/user/film/test-film/",
+            title="Review of Test Film",
+        )
+
+    monkeypatch.setattr(scraper, "_fetch_html", fake_fetch_html)
+    monkeypatch.setattr("src.ingestion.scraper._parse_film_page", fake_parse_film_page)
+
+    result = scraper.scrape_one("https://boxd.it/test")
+
+    assert not result.ok
+    assert result.scrape_error == "canonical fetch failed for review/log URL"
+    assert result.letterboxd_url == "https://letterboxd.com/film/test-film"
+    assert result.requested_url == "https://boxd.it/test"
+    assert result.attempts == 1
+
+
 def test_scrape_many_logs_startup_progress(monkeypatch, caplog) -> None:
     scraper = LetterboxdScraper(max_workers=4, timeout_s=8, retries=1, progress_every=10)
     monkeypatch.setattr(
