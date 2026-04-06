@@ -11,7 +11,8 @@ from datetime import datetime
 from http.client import IncompleteRead, RemoteDisconnected
 from typing import Iterable
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+import httpx
 
 from src.ingestion.scraper_parser import _is_review_like_page, _looks_like_review_title, _parse_film_page
 from src.ingestion.scraper_urls import _is_letterboxd_url, _normalize_film_url, _to_global_film_url
@@ -92,20 +93,34 @@ class LetterboxdScraper:
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/122.0.0.0 Safari/537.36"
         )
+        self._client_local = threading.local()
+
+    def _get_http_client(self) -> httpx.Client:
+        client = getattr(self._client_local, "client", None)
+        if client is None:
+            timeout = httpx.Timeout(self.timeout_s)
+            limits = httpx.Limits(
+                max_connections=max(10, self.max_workers * 2),
+                max_keepalive_connections=max(10, self.max_workers),
+                keepalive_expiry=30.0,
+            )
+            client = httpx.Client(
+                timeout=timeout,
+                limits=limits,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": self._user_agent,
+                    "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8",
+                },
+            )
+            self._client_local.client = client
+        return client
 
     def _fetch_html(self, url: str) -> tuple[str, str]:
         self._rate_limiter.acquire()
-        request = Request(
-            url=url,
-            headers={
-                "User-Agent": self._user_agent,
-                "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8",
-            },
-        )
-        with urlopen(request, timeout=self.timeout_s) as response:
-            charset = response.headers.get_content_charset() or "utf-8"
-            html = response.read().decode(charset, errors="replace")
-            return html, response.geturl()
+        response = self._get_http_client().get(url)
+        response.raise_for_status()
+        return response.text, str(response.url)
 
     def _retry_sleep(self, attempt: int) -> None:
         if self.retry_backoff_s <= 0:
@@ -150,6 +165,25 @@ class LetterboxdScraper:
                                 attempts=attempt,
                             )
                 return result
+            except httpx.HTTPStatusError as err:
+                status_code = err.response.status_code
+                if status_code not in RETRYABLE_HTTP_STATUS or attempt >= attempts:
+                    return FilmScrapeResult(
+                        letterboxd_url=url,
+                        requested_url=url,
+                        scrape_error=f"HTTP {status_code}",
+                        attempts=attempt,
+                    )
+                self._retry_sleep(attempt)
+            except httpx.RequestError as err:
+                if attempt >= attempts:
+                    return FilmScrapeResult(
+                        letterboxd_url=url,
+                        requested_url=url,
+                        scrape_error=str(err),
+                        attempts=attempt,
+                    )
+                self._retry_sleep(attempt)
             except HTTPError as err:
                 if err.code not in RETRYABLE_HTTP_STATUS or attempt >= attempts:
                     return FilmScrapeResult(

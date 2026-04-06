@@ -356,12 +356,21 @@ def _build_scrape_queue(
 
     if existing_film_keys:
         before = len(all_uris)
-        mask_existing_key = all_uris.apply(
-            lambda r: (str(r["film_name"]).strip().lower(), None if pd.isna(r["film_year"]) else int(r["film_year"]))
-            in existing_film_keys,
-            axis=1,
+        normalized_name = all_uris["film_name"].astype("string").str.strip().str.lower()
+        normalized_year = pd.to_numeric(all_uris["film_year"], errors="coerce")
+        year_values = normalized_year.where(~normalized_year.isna(), None)
+        year_values = year_values.astype("Int64")
+
+        key_series = pd.Series(
+            list(
+                zip(
+                    normalized_name.tolist(),
+                    [None if pd.isna(year) else int(year) for year in year_values.tolist()],
+                )
+            ),
+            index=all_uris.index,
         )
-        all_uris = all_uris[~mask_existing_key]
+        all_uris = all_uris[~key_series.isin(existing_film_keys)]
         logger.info(
             f"scrape_queue: {before - len(all_uris)} filme(s) já existem no banco "
             f"por chave nome+ano e foram removidos da fila."
