@@ -87,20 +87,28 @@ def run(
                 progress_every=progress_every,
             )
             retried = retry_scraper.scrape_many(failed_uris)
+            recovered_count = 0
 
             for idx, retried_item in zip(failed_idx, retried):
                 if retried_item.ok:
                     scrape_results[idx] = retried_item
+                    recovered_count += 1
 
             ok_count = sum(1 for item in scrape_results if item.ok)
             err_count = len(scrape_results) - ok_count
             logging.info(
-                "Pos-retry (%s/%s): ok=%s erro=%s",
+                "Pos-retry (%s/%s): ok=%s erro=%s recuperados=%s",
                 attempt,
                 retry_failed_passes,
                 ok_count,
                 err_count,
+                recovered_count,
             )
+            if recovered_count == 0:
+                logging.info(
+                    "Retry automatico encerrado antes do limite: nenhuma URL foi recuperada nesta passada."
+                )
+                break
 
     if errors_out and err_count > 0:
         written = write_scrape_failures(scrape_results, errors_out)

@@ -18,6 +18,7 @@ from src.db.repository_common import (
     _safe_password_hash,
 )
 from src.ingestion.scraper import FilmScrapeResult
+from src.text_filters import is_show_all_placeholder, normalize_text_token
 
 logger = logging.getLogger(__name__)
 
@@ -173,22 +174,22 @@ def _upsert_film_dimensions(cur: Any, results: list[FilmScrapeResult], film_id_b
         film_id = film_id_by_url[url]
 
         for raw_genre in item.genres:
-            genre = (raw_genre or "").strip()
-            if not genre:
+            genre = normalize_text_token(raw_genre)
+            if not genre or is_show_all_placeholder(genre):
                 continue
             genre_names.add(genre)
             pending_film_genres.add((film_id, genre))
 
         for raw_director in item.directors:
-            director = (raw_director or "").strip()
-            if not director:
+            director = normalize_text_token(raw_director)
+            if not director or is_show_all_placeholder(director):
                 continue
             people_names.add(director)
             pending_directors.add((film_id, director))
 
         for order, raw_actor in enumerate(item.cast, start=1):
-            actor = (raw_actor or "").strip()
-            if not actor:
+            actor = normalize_text_token(raw_actor)
+            if not actor or is_show_all_placeholder(actor):
                 continue
             people_names.add(actor)
             pending_actors.setdefault((film_id, actor), order)

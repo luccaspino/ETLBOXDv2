@@ -112,7 +112,7 @@ def run_pipeline(
         logger.warning("Falha controlada na execucao do pipeline: %s", err)
         raise HTTPException(
             status_code=422,
-            detail="Nao foi possivel concluir o pipeline com os parametros informados.",
+            detail=str(err),
         ) from err
     except Exception as err:
         logger.exception("Erro interno ao executar pipeline")

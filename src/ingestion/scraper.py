@@ -8,6 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
+from http.client import IncompleteRead, RemoteDisconnected
 from typing import Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -18,6 +19,13 @@ from src.ingestion.scraper_urls import _is_letterboxd_url, _normalize_film_url, 
 logger = logging.getLogger(__name__)
 
 RETRYABLE_HTTP_STATUS = {408, 425, 429, 500, 502, 503, 504}
+TRANSIENT_FETCH_ERRORS = (
+    URLError,
+    TimeoutError,
+    OSError,
+    IncompleteRead,
+    RemoteDisconnected,
+)
 
 
 @dataclass
@@ -151,7 +159,16 @@ class LetterboxdScraper:
                         attempts=attempt,
                     )
                 self._retry_sleep(attempt)
-            except (URLError, TimeoutError, ValueError) as err:
+            except TRANSIENT_FETCH_ERRORS as err:
+                if attempt >= attempts:
+                    return FilmScrapeResult(
+                        letterboxd_url=url,
+                        requested_url=url,
+                        scrape_error=str(err),
+                        attempts=attempt,
+                    )
+                self._retry_sleep(attempt)
+            except ValueError as err:
                 if attempt >= attempts:
                     return FilmScrapeResult(
                         letterboxd_url=url,

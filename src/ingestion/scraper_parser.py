@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlparse
 from bs4 import BeautifulSoup
 
 from src.ingestion.scraper_urls import COUNTRY_SLUG_TO_CODE, _is_letterboxd_url, _to_global_film_url
+from src.text_filters import is_show_all_placeholder, normalize_text_token
 
 if TYPE_CHECKING:
     from src.ingestion.scraper import FilmScrapeResult
@@ -145,8 +146,10 @@ def _extract_people(entries: object) -> list[str]:
     for entry in entries:
         if isinstance(entry, dict):
             name = entry.get("name")
-            if isinstance(name, str) and name.strip():
-                names.append(name.strip())
+            if isinstance(name, str):
+                normalized_name = normalize_text_token(name)
+                if normalized_name and not is_show_all_placeholder(normalized_name):
+                    names.append(normalized_name)
     return list(dict.fromkeys(names))
 
 
@@ -189,8 +192,8 @@ def _extract_tagline_from_synopsis(soup: BeautifulSoup) -> str | None:
 def _extract_genres_from_html(soup: BeautifulSoup) -> list[str]:
     out = []
     for anchor in soup.select("#tab-genres a[href*='/films/genre/']"):
-        text = anchor.get_text(" ", strip=True)
-        if text and text.lower() != "show allÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦":
+        text = normalize_text_token(anchor.get_text(" ", strip=True))
+        if text and not is_show_all_placeholder(text):
             out.append(text)
     return list(dict.fromkeys(out))
 
@@ -225,8 +228,8 @@ def _extract_details_tab(soup: BeautifulSoup) -> tuple[list[str], str | None]:
 def _extract_cast_from_html(soup: BeautifulSoup) -> list[str]:
     names = []
     for anchor in soup.select("#tab-cast .cast-list a"):
-        text = anchor.get_text(" ", strip=True)
-        if text:
+        text = normalize_text_token(anchor.get_text(" ", strip=True))
+        if text and not is_show_all_placeholder(text):
             names.append(text)
     return list(dict.fromkeys(names))
 
@@ -234,13 +237,13 @@ def _extract_cast_from_html(soup: BeautifulSoup) -> list[str]:
 def _extract_directors_from_html(soup: BeautifulSoup) -> list[str]:
     names = []
     for anchor in soup.select("#tab-crew a[href*='/director/']"):
-        text = anchor.get_text(" ", strip=True)
-        if text:
+        text = normalize_text_token(anchor.get_text(" ", strip=True))
+        if text and not is_show_all_placeholder(text):
             names.append(text)
     if not names:
         for anchor in soup.select("#tab-crew .text-sluglist a"):
-            text = anchor.get_text(" ", strip=True)
-            if text:
+            text = normalize_text_token(anchor.get_text(" ", strip=True))
+            if text and not is_show_all_placeholder(text):
                 names.append(text)
     return list(dict.fromkeys(names))
 

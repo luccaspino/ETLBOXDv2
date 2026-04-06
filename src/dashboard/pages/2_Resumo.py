@@ -12,16 +12,8 @@ import streamlit as st
 
 from src.dashboard.api_client import (
     ApiClientError,
-    get_country_distribution,
     get_filtered_films,
-    get_genre_distribution,
-    get_logged_films,
-    get_main_kpis,
-    get_monthly_logs,
-    get_rating_distribution,
-    get_rating_gap_kpis,
-    get_release_year_kpi,
-    get_yearly_logs,
+    get_summary_bundle,
 )
 from src.dashboard.branding import configure_page, render_sidebar_nav
 from src.dashboard.components.collages import (
@@ -37,8 +29,14 @@ from src.dashboard.components.summary import (
     aggregate_rating_distribution,
     build_logged_films_dataframe,
     build_month_selection_chart,
+    build_rating_selection_chart,
+    build_year_selection_chart,
     compute_summary_metrics,
     extract_selected_month,
+    extract_selected_rating,
+    extract_selected_year,
+    filter_logged_films,
+    format_rating_label,
 )
 from src.dashboard.components.tables import render_records_table
 from src.dashboard.state import get_active_username, initialize_state
@@ -51,6 +49,52 @@ def _extract_year_from_date(date_text: str | None) -> int | None:
         return int(date_text[:4])
     except ValueError:
         return None
+
+
+def _coerce_selected_int(value: object, *, minimum: int, maximum: int) -> int | None:
+    try:
+        integer_value = int(value)
+    except (TypeError, ValueError):
+        return None
+    if minimum <= integer_value <= maximum:
+        return integer_value
+    return None
+
+
+def _coerce_selected_rating(value: object) -> float | None:
+    try:
+        rating_value = round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+    if 0.5 <= rating_value <= 5.0:
+        return rating_value
+    return None
+
+
+def _describe_active_filters(
+    selected_month: int | None,
+    selected_year: int | None,
+    selected_rating: float | None,
+) -> str:
+    active_filters: list[str] = []
+    if selected_month is not None:
+        active_filters.append(f"mes {month_label(selected_month)}")
+    if selected_year is not None:
+        active_filters.append(f"ano {selected_year}")
+    if selected_rating is not None:
+        active_filters.append(f"nota {format_rating_label(selected_rating)}")
+    return ", ".join(active_filters)
+
+
+def _dataframe_to_records(df: pd.DataFrame) -> list[dict[str, object]]:
+    if df.empty:
+        return []
+
+    normalized = df.copy()
+    if "watched_date" in normalized.columns:
+        normalized["watched_date"] = normalized["watched_date"].dt.strftime("%Y-%m-%d")
+    normalized = normalized.where(pd.notna(normalized), None)
+    return normalized.to_dict("records")
 
 
 configure_page("ETLboxd | Resumo")
@@ -72,65 +116,109 @@ if not username:
     st.stop()
 
 st.session_state.setdefault("summary_month_filter", None)
-st.session_state.setdefault("summary_month_chart_nonce", 0)
+st.session_state.setdefault("summary_year_filter", None)
+st.session_state.setdefault("summary_rating_filter", None)
+st.session_state.setdefault("summary_crossfilter_chart_nonce", 0)
 
-selected_month = st.session_state.get("summary_month_filter")
-if not isinstance(selected_month, int) or not (1 <= selected_month <= 12):
-    selected_month = None
+selected_month = _coerce_selected_int(
+    st.session_state.get("summary_month_filter"),
+    minimum=1,
+    maximum=12,
+)
+selected_year = _coerce_selected_int(
+    st.session_state.get("summary_year_filter"),
+    minimum=1880,
+    maximum=2100,
+)
+selected_rating = _coerce_selected_rating(st.session_state.get("summary_rating_filter"))
 
 try:
     with st.spinner("Carregando resumo analitico..."):
-        main_kpis = get_main_kpis(username)
-        rating_gap = get_rating_gap_kpis(username)
-        release_year = get_release_year_kpi(username)
-        monthly_logs = get_monthly_logs(username)
-        yearly_logs = get_yearly_logs(username)
-        rating_distribution_rows = get_rating_distribution(username)
-        country_distribution = get_country_distribution(username)
-        genre_distribution = get_genre_distribution(username)
-
-        try:
-            logged_film_rows = get_logged_films(username, allow_legacy_fallback=False)
-            logged_films_supported = True
-        except ApiClientError as err:
-            if err.status_code == 404:
-                logged_film_rows = []
-                logged_films_supported = False
-            else:
-                raise
+        summary_bundle = get_summary_bundle(username)
+        main_kpis = summary_bundle["main_kpis"]
+        rating_gap = summary_bundle["rating_gap"]
+        release_year = summary_bundle["release_year"]
+        monthly_logs = summary_bundle["monthly_logs"]
+        yearly_logs = summary_bundle["yearly_logs"]
+        rating_distribution_rows = summary_bundle["rating_distribution_rows"]
+        country_distribution = summary_bundle["country_distribution"]
+        genre_distribution = summary_bundle["genre_distribution"]
+        logged_film_rows = summary_bundle["logged_film_rows"]
+        logged_films_supported = bool(summary_bundle["logged_films_supported"])
 except ApiClientError as err:
     render_api_error(err)
     st.stop()
 
-if not logged_films_supported and selected_month is not None:
+if not logged_films_supported and any(
+    value is not None for value in (selected_month, selected_year, selected_rating)
+):
     st.session_state["summary_month_filter"] = None
+    st.session_state["summary_year_filter"] = None
+    st.session_state["summary_rating_filter"] = None
     selected_month = None
+    selected_year = None
+    selected_rating = None
 
-if logged_films_supported and selected_month is not None:
+active_filters_label = _describe_active_filters(selected_month, selected_year, selected_rating)
+
+if logged_films_supported and active_filters_label:
     filter_col, action_col = st.columns([4, 1])
     with filter_col:
         st.info(
-            f"Filtro cruzado ativo: somente logs de {month_label(selected_month)} alimentam os indicadores abaixo."
+            f"Filtros cruzados ativos: {active_filters_label}. "
+            "Os indicadores e distribuicoes abaixo usam a intersecao desses recortes."
         )
     with action_col:
-        if st.button("Limpar filtro", width="stretch"):
+        if st.button("Limpar filtros", width="stretch"):
             st.session_state["summary_month_filter"] = None
-            st.session_state["summary_month_chart_nonce"] += 1
+            st.session_state["summary_year_filter"] = None
+            st.session_state["summary_rating_filter"] = None
+            st.session_state["summary_crossfilter_chart_nonce"] += 1
             st.rerun()
 elif not logged_films_supported:
     st.info(
         "Modo de compatibilidade ativo: o backend atual ainda nao publicou os logs detalhados, "
         "entao os totais continuam corretos e a colagem usa o comportamento anterior. "
-        "O filtro cruzado por clique no grafico sera habilitado quando a rota nova estiver disponivel."
+        "O filtro cruzado por clique nos graficos sera habilitado quando a rota nova estiver disponivel."
     )
 
 logged_films_df = build_logged_films_dataframe(logged_film_rows) if logged_films_supported else pd.DataFrame()
 
-if logged_films_supported and selected_month is not None:
-    filtered_logs_df = logged_films_df[logged_films_df["watched_month"] == selected_month].copy()
+if logged_films_supported:
+    filtered_logs_df = filter_logged_films(
+        logged_films_df,
+        month=selected_month,
+        year=selected_year,
+        rating=selected_rating,
+    )
     metrics = compute_summary_metrics(filtered_logs_df)
-    yearly_df = aggregate_logs_by_year(filtered_logs_df)
-    rating_df = aggregate_rating_distribution(filtered_logs_df)
+    monthly_df = aggregate_logs_by_month(
+        filter_logged_films(
+            logged_films_df,
+            month=selected_month,
+            year=selected_year,
+            rating=selected_rating,
+            exclude={"month"},
+        )
+    )
+    yearly_df = aggregate_logs_by_year(
+        filter_logged_films(
+            logged_films_df,
+            month=selected_month,
+            year=selected_year,
+            rating=selected_rating,
+            exclude={"year"},
+        )
+    )
+    rating_df = aggregate_rating_distribution(
+        filter_logged_films(
+            logged_films_df,
+            month=selected_month,
+            year=selected_year,
+            rating=selected_rating,
+            exclude={"rating"},
+        )
+    )
     country_distribution = aggregate_name_counts(
         filtered_logs_df,
         list_column="countries_list",
@@ -168,12 +256,11 @@ charts_col1, charts_col2 = st.columns(2)
 with charts_col1:
     st.subheader("Logs por mes")
     if logged_films_supported:
-        monthly_df = aggregate_logs_by_month(logged_films_df)
         monthly_chart = build_month_selection_chart(monthly_df, selected_month)
         month_chart_event = st.altair_chart(
             monthly_chart,
             width="stretch",
-            key=f"summary-month-chart:{username}:{st.session_state['summary_month_chart_nonce']}",
+            key=f"summary-month-chart:{username}:{st.session_state['summary_crossfilter_chart_nonce']}",
             on_select="rerun",
             selection_mode="month_select",
         )
@@ -182,10 +269,12 @@ with charts_col1:
             st.session_state["summary_month_filter"] = event_month
             st.rerun()
 
-        if selected_month is None:
-            st.caption("Clique em um mes para aplicar o filtro cruzado no restante da pagina.")
+        if selected_month is None and not active_filters_label:
+            st.caption("Clique nas barras de mes, ano ou nota para aplicar o filtro cruzado na pagina.")
+        elif selected_month is None:
+            st.caption("Clique em um mes para adicionar esse recorte ao filtro cruzado atual.")
         else:
-            st.caption("Duplo clique no grafico ou use 'Limpar filtro' para voltar ao total.")
+            st.caption("Duplo clique neste grafico remove apenas o filtro de mes.")
     else:
         monthly_df = pd.DataFrame(monthly_logs)
         if monthly_df.empty:
@@ -198,10 +287,26 @@ with charts_col2:
     st.subheader("Logs por ano")
     if yearly_df.empty:
         render_empty_state("Sem dados anuais", "Nenhum log anual foi encontrado para este usuario.")
+    elif logged_films_supported:
+        yearly_chart = build_year_selection_chart(yearly_df, selected_year)
+        year_chart_event = st.altair_chart(
+            yearly_chart,
+            width="stretch",
+            key=f"summary-year-chart:{username}:{st.session_state['summary_crossfilter_chart_nonce']}",
+            on_select="rerun",
+            selection_mode="year_select",
+        )
+        event_year = extract_selected_year(year_chart_event)
+        if event_year != selected_year:
+            st.session_state["summary_year_filter"] = event_year
+            st.rerun()
+
+        if selected_year is None:
+            st.caption("Clique em um ano para adicionar esse recorte ao filtro cruzado atual.")
+        else:
+            st.caption("Duplo clique neste grafico remove apenas o filtro de ano.")
     else:
         st.bar_chart(yearly_df.set_index("ano"))
-        if logged_films_supported and selected_month is not None:
-            st.caption(f"Contagens anuais considerando apenas {month_label(selected_month)}.")
 
 distribution_row = st.columns(3)
 
@@ -210,7 +315,26 @@ with distribution_row[0]:
     if rating_df.empty:
         render_empty_state("Sem distribuicao", "Nao ha distribuicao de notas disponivel para este recorte.")
     else:
-        st.bar_chart(rating_df.set_index("rating"))
+        if logged_films_supported:
+            rating_chart = build_rating_selection_chart(rating_df, selected_rating)
+            rating_chart_event = st.altair_chart(
+                rating_chart,
+                width="stretch",
+                key=f"summary-rating-chart:{username}:{st.session_state['summary_crossfilter_chart_nonce']}",
+                on_select="rerun",
+                selection_mode="rating_select",
+            )
+            event_rating = extract_selected_rating(rating_chart_event)
+            if event_rating != selected_rating:
+                st.session_state["summary_rating_filter"] = event_rating
+                st.rerun()
+
+            if selected_rating is None:
+                st.caption("Clique em uma nota para adicionar esse recorte ao filtro cruzado atual.")
+            else:
+                st.caption("Duplo clique neste grafico remove apenas o filtro de nota.")
+        else:
+            st.bar_chart(rating_df.set_index("rating"))
         render_records_table(rating_df.to_dict("records"))
 
 with distribution_row[1]:
@@ -232,8 +356,9 @@ st.subheader("Colagem mensal")
 st.caption("Posteres com tamanho fixo e legenda sobreposta para um mes assistido.")
 
 if logged_films_supported:
+    collage_source_df = filter_logged_films(logged_films_df, rating=selected_rating)
     available_years = sorted(
-        [int(item) for item in logged_films_df["watched_year"].dropna().astype(int).unique().tolist()],
+        [int(item) for item in collage_source_df["watched_year"].dropna().astype(int).unique().tolist()],
         reverse=True,
     )
 else:
@@ -247,18 +372,18 @@ if not available_years:
 else:
     collage_control_col1, collage_control_col2 = st.columns([1, 1])
     with collage_control_col1:
-        selected_collage_year = st.selectbox(
-            "Ano da colagem",
-            options=available_years,
-            key="month-collage-year",
-        )
+        if logged_films_supported and selected_year is not None:
+            selected_collage_year = selected_year
+            st.metric("Ano da colagem", selected_collage_year)
+        else:
+            selected_collage_year = st.selectbox(
+                "Ano da colagem",
+                options=available_years,
+                key="month-collage-year",
+            )
 
     if logged_films_supported:
-        year_film_rows = [
-            row
-            for row in logged_film_rows
-            if _extract_year_from_date(row.get("watched_date")) == selected_collage_year
-        ]
+        year_film_df = collage_source_df[collage_source_df["watched_year"] == selected_collage_year].copy()
     else:
         try:
             with st.spinner("Buscando filmes do ano selecionado..."):
@@ -267,17 +392,22 @@ else:
             render_api_error(err, message="Ocorreu um erro ao carregar a colagem mensal.")
             year_film_rows = None
 
-    available_months = (
-        sorted(
-            {
-                month_number
-                for row in year_film_rows
-                if (month_number := extract_month_from_date(row.get("watched_date"))) is not None
-            }
+    if logged_films_supported:
+        available_months = sorted(
+            [int(item) for item in year_film_df["watched_month"].dropna().astype(int).unique().tolist()]
         )
-        if year_film_rows is not None
-        else []
-    )
+    else:
+        available_months = (
+            sorted(
+                {
+                    month_number
+                    for row in year_film_rows
+                    if (month_number := extract_month_from_date(row.get("watched_date"))) is not None
+                }
+            )
+            if year_film_rows is not None
+            else []
+        )
 
     if not available_months:
         render_empty_state(
@@ -289,7 +419,6 @@ else:
             selected_collage_month = selected_month
             with collage_control_col2:
                 st.metric("Mes da colagem", month_label(selected_collage_month))
-            st.caption("A colagem esta sincronizada com o filtro cruzado aplicado no grafico mensal.")
         else:
             with collage_control_col2:
                 selected_collage_month = st.selectbox(
@@ -299,11 +428,21 @@ else:
                     key=f"month-collage-month-{selected_collage_year}",
                 )
 
-        month_collage_rows = [
-            row
-            for row in year_film_rows
-            if extract_month_from_date(row.get("watched_date")) == selected_collage_month
-        ]
+        if logged_films_supported:
+            month_collage_rows = _dataframe_to_records(
+                year_film_df[year_film_df["watched_month"] == selected_collage_month].copy()
+            )
+            if active_filters_label:
+                st.caption(
+                    "A colagem acompanha os filtros cruzados ativos; os seletores acima controlam apenas "
+                    "dimensoes ainda nao fixadas por clique."
+                )
+        else:
+            month_collage_rows = [
+                row
+                for row in year_film_rows
+                if extract_month_from_date(row.get("watched_date")) == selected_collage_month
+            ]
 
         if not month_collage_rows:
             if logged_films_supported and selected_month is not None:

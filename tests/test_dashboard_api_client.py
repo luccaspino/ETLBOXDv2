@@ -3,6 +3,27 @@ from __future__ import annotations
 from src.dashboard import api_client
 
 
+def test_run_pipeline_upload_uses_api_defaults(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_request_json(method: str, path: str, **kwargs):
+        captured["method"] = method
+        captured["path"] = path
+        captured["data"] = kwargs.get("data")
+        captured["files"] = kwargs.get("files")
+        return {"username": "ppino", "films_upserted_from_scrape": 1, "user_films_loaded": 2, "watchlist_loaded": 3}
+
+    monkeypatch.setattr(api_client, "_request_json", fake_request_json)
+
+    payload = api_client.run_pipeline_upload("letterboxd.zip", b"zip-bytes")
+
+    assert payload["username"] == "ppino"
+    assert captured["method"] == "POST"
+    assert captured["path"] == "/pipeline/run"
+    assert captured["data"] is None
+    assert captured["files"] == {"file": ("letterboxd.zip", b"zip-bytes", "application/zip")}
+
+
 def test_get_logged_films_uses_new_route_when_available(monkeypatch) -> None:
     monkeypatch.setattr(
         api_client,

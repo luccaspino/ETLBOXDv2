@@ -1,14 +1,81 @@
 services:
   db:
     image: postgres:16
-    container_name: letterboxd_db
+    container_name: etlboxd_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: letterboxd
+      POSTGRES_PASSWORD: letterboxd
+      POSTGRES_DB: letterboxd
     ports:
       - "5432:5432"
     volumes:
-      - ./db/data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+    container_name: etlboxd_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://letterboxd:letterboxd@db:5432/letterboxd
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: letterboxd
+      POSTGRES_USER: letterboxd
+      POSTGRES_PASSWORD: letterboxd
+      POSTGRES_SSLMODE: disable
+      API_CORS_ORIGINS: http://localhost:8501,http://127.0.0.1:8501
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  dashboard:
+    build:
+      context: .
+    container_name: etlboxd_dashboard
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://api:8000
+    command: >
+      streamlit run src/dashboard/app.py
+      --server.address 0.0.0.0
+      --server.port 8501
+      --server.enableCORS false
+      --server.enableXsrfProtection false
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:

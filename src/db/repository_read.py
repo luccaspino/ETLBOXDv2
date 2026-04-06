@@ -9,6 +9,7 @@ from src.db.repository_common import (
     _normalize_number,
     _normalize_text_filter,
 )
+from src.text_filters import is_show_all_placeholder, normalize_text_token
 
 
 def _build_filtered_clause(
@@ -570,14 +571,19 @@ def get_people_rankings(
         )
         rows = cur.fetchall()
 
-    return [
-        {
-            "nome": row[0],
-            "filmes_assistidos": int(row[1]),
-            "media_nota_pessoal": _normalize_number(row[2]),
-        }
-        for row in rows
-    ]
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        person_name = normalize_text_token(row[0])
+        if not person_name or is_show_all_placeholder(person_name):
+            continue
+        output.append(
+            {
+                "nome": person_name,
+                "filmes_assistidos": int(row[1]),
+                "media_nota_pessoal": _normalize_number(row[2]),
+            }
+        )
+    return output
 
 
 def _fetch_filtered_film_rows(
@@ -867,7 +873,11 @@ def get_filter_options(user_id: str) -> dict[str, Any]:
             """,
             (user_id,),
         )
-        directors = [str(row[0]) for row in cur.fetchall() if row[0]]
+        directors = [
+            name
+            for row in cur.fetchall()
+            if (name := normalize_text_token(row[0])) and not is_show_all_placeholder(name)
+        ]
 
         cur.execute(
             f"""
@@ -880,7 +890,11 @@ def get_filter_options(user_id: str) -> dict[str, Any]:
             """,
             (user_id,),
         )
-        actors = [str(row[0]) for row in cur.fetchall() if row[0]]
+        actors = [
+            name
+            for row in cur.fetchall()
+            if (name := normalize_text_token(row[0])) and not is_show_all_placeholder(name)
+        ]
 
         cur.execute(
             f"""

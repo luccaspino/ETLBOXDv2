@@ -9,11 +9,12 @@ if str(ROOT_DIR) not in sys.path:
 
 import streamlit as st
 
-from src.dashboard.api_client import ApiClientError, get_filter_options, get_filtered_films, get_rankings
+from src.dashboard.api_client import ApiClientError, get_filtered_films, get_rankings_bundle
 from src.dashboard.branding import configure_page, render_sidebar_nav
 from src.dashboard.components.collages import render_film_grid
 from src.dashboard.components.messages import render_api_error, render_empty_state
 from src.dashboard.state import get_active_username, initialize_state
+from src.text_filters import is_show_all_placeholder, normalize_text_token
 
 configure_page("ETLboxd | Rankings")
 initialize_state()
@@ -52,7 +53,16 @@ def _set_drilldown(category_key: str, item_name: str) -> None:
 
 def _render_ranking_list(title: str, rows: list[dict], category_key: str, *, key_prefix: str) -> None:
     st.subheader(title)
-    if not rows:
+    visible_rows = []
+    for row in rows:
+        item_name = normalize_text_token(row.get("nome"))
+        if not item_name or is_show_all_placeholder(item_name):
+            continue
+        normalized_row = dict(row)
+        normalized_row["nome"] = item_name
+        visible_rows.append(normalized_row)
+
+    if not visible_rows:
         render_empty_state("Sem resultados", "Nenhum item atendeu a esse recorte.")
         return
 
@@ -61,7 +71,7 @@ def _render_ranking_list(title: str, rows: list[dict], category_key: str, *, key
     header_col2.caption("Filmes")
     header_col3.caption("Média")
 
-    for index, row in enumerate(rows):
+    for index, row in enumerate(visible_rows):
         row_col1, row_col2, row_col3 = st.columns([3, 1, 1])
         item_name = str(row.get("nome") or "-")
         with row_col1:
@@ -85,29 +95,18 @@ country_name_to_code: dict[str, str] = {}
 
 try:
     with st.spinner("Carregando rankings..."):
-        filter_options = get_filter_options(username)
+        rankings_bundle = get_rankings_bundle(
+            username,
+            min_most_watched=int(min_most_watched),
+            min_best_rated=int(min_best_rated),
+        )
+        filter_options = rankings_bundle["filter_options"]
         country_name_to_code = {
             item["name"]: item["code"]
             for item in filter_options.get("country_options", [])
             if item.get("name") and item.get("code")
         }
-        rankings_by_category = {
-            category_key: {
-                "most_watched": get_rankings(
-                    username,
-                    category_key,
-                    "most-watched",
-                    min_films=int(min_most_watched),
-                ),
-                "best_rated": get_rankings(
-                    username,
-                    category_key,
-                    "best-rated",
-                    min_films=int(min_best_rated),
-                ),
-            }
-            for category_key, _ in ranking_sections
-        }
+        rankings_by_category = rankings_bundle["rankings_by_category"]
 except ApiClientError as err:
     render_api_error(err)
     st.stop()

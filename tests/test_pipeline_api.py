@@ -31,7 +31,10 @@ def test_pipeline_run_accepts_valid_zip_with_extra_csv(client, monkeypatch) -> N
     monkeypatch.setenv('PIPELINE_RATE_LIMIT_WINDOW_SECONDS', '900')
     monkeypatch.setenv('PIPELINE_RATE_LIMIT_MAX_REQUESTS', '5')
 
+    captured: dict[str, object] = {}
+
     def fake_run(**kwargs):
+        captured.update(kwargs)
         assert kwargs['zip_path'].endswith('.zip')
         return {
             'username': 'ppino',
@@ -54,6 +57,8 @@ def test_pipeline_run_accepts_valid_zip_with_extra_csv(client, monkeypatch) -> N
         'user_films_loaded': 1170,
         'watchlist_loaded': 616,
     }
+    assert captured["require_complete_scrape"] is True
+    assert captured["max_failed_ratio"] == 0.0
 
 
 def test_pipeline_run_rejects_non_zip_upload(client, monkeypatch) -> None:
@@ -98,3 +103,24 @@ def test_pipeline_run_rate_limits_repeated_requests(client, monkeypatch) -> None
     assert first.status_code == 200
     assert second.status_code == 429
     assert 'Retry-After' in second.headers
+
+
+def test_pipeline_run_exposes_runtime_error_detail(client, monkeypatch) -> None:
+    pipeline_route._PIPELINE_REQUEST_HISTORY.clear()
+    monkeypatch.setenv('PIPELINE_MAX_ZIP_MB', '5')
+    monkeypatch.setenv('PIPELINE_RATE_LIMIT_WINDOW_SECONDS', '900')
+    monkeypatch.setenv('PIPELINE_RATE_LIMIT_MAX_REQUESTS', '5')
+
+    monkeypatch.setattr(
+        pipeline_route,
+        'run',
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError('Scraping incompleto: 32 URL(s) falharam.')),
+    )
+
+    response = client.post(
+        '/pipeline/run',
+        files={'file': ('letterboxd.zip', _sample_zip_bytes(), 'application/zip')},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == 'Scraping incompleto: 32 URL(s) falharam.'
