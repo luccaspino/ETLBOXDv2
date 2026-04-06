@@ -29,6 +29,7 @@ from src.db import (
     get_genre_counts,
     get_filter_options,
     get_genre_rankings,
+    get_language_rankings,
     get_logged_films,
     get_logs_by_month,
     get_logs_by_year,
@@ -97,6 +98,7 @@ def get_logged_films_table(
     director_name: str | None = Query(None),
     actor_name: str | None = Query(None),
     country_code: str | None = Query(None, min_length=2, max_length=2),
+    original_language: str | None = Query(None),
     genre_name: str | None = Query(None),
     watched_month: int | None = Query(None, ge=1, le=12),
     watched_year: int | None = Query(None, ge=1880, le=2100),
@@ -113,6 +115,7 @@ def get_logged_films_table(
             director_name=director_name,
             actor_name=actor_name,
             country_code=country_code,
+            original_language=original_language,
             genre_name=genre_name,
             watched_month=watched_month,
             watched_year=watched_year,
@@ -154,6 +157,28 @@ def get_countries_best_rated(
     return [
         CategoryRankingItem(**row)
         for row in get_country_rankings(user_id, order_by="best_rated", min_films=min_films)
+    ]
+
+
+@router.get("/rankings/languages/most-watched", response_model=list[CategoryRankingItem])
+def get_languages_most_watched(
+    user_id: str = Depends(require_user_id),
+    min_films: int = Query(1, ge=1, description="Minimo de filmes para entrar no ranking"),
+) -> list[CategoryRankingItem]:
+    return [
+        CategoryRankingItem(**row)
+        for row in get_language_rankings(user_id, order_by="most_watched", min_films=min_films)
+    ]
+
+
+@router.get("/rankings/languages/best-rated", response_model=list[CategoryRankingItem])
+def get_languages_best_rated(
+    user_id: str = Depends(require_user_id),
+    min_films: int = Query(3, ge=1, description="Minimo de filmes avaliados para entrar no ranking"),
+) -> list[CategoryRankingItem]:
+    return [
+        CategoryRankingItem(**row)
+        for row in get_language_rankings(user_id, order_by="best_rated", min_films=min_films)
     ]
 
 
@@ -275,6 +300,7 @@ def get_films_table(
     director_name: str | None = Query(None),
     actor_name: str | None = Query(None),
     country_code: str | None = Query(None, min_length=2, max_length=2),
+    original_language: str | None = Query(None),
     genre_name: str | None = Query(None),
     watched_month: int | None = Query(None, ge=1, le=12),
     watched_year: int | None = Query(None, ge=1880, le=2100),
@@ -291,6 +317,7 @@ def get_films_table(
             director_name=director_name,
             actor_name=actor_name,
             country_code=country_code,
+            original_language=original_language,
             genre_name=genre_name,
             watched_month=watched_month,
             watched_year=watched_year,

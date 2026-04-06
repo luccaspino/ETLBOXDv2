@@ -49,6 +49,29 @@ def test_country_rankings_most_watched_passes_filters(client, monkeypatch) -> No
     assert calls == {'user_id': 'user-123', 'order_by': 'most_watched', 'min_films': 2}
 
 
+def test_language_rankings_most_watched_passes_filters(client, monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
+
+    def fake_rankings(user_id: str, order_by: str, min_films: int):
+        calls['user_id'] = user_id
+        calls['order_by'] = order_by
+        calls['min_films'] = min_films
+        return [{'nome': 'Japanese', 'filmes_assistidos': 9, 'media_nota_pessoal': 4.1}]
+
+    monkeypatch.setattr(analytics_route, 'get_language_rankings', fake_rankings)
+
+    response = client.get(
+        '/analytics/rankings/languages/most-watched',
+        params={'username': 'ppino', 'min_films': 2},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == [{'nome': 'Japanese', 'filmes_assistidos': 9, 'media_nota_pessoal': 4.1}]
+    assert calls == {'user_id': 'user-123', 'order_by': 'most_watched', 'min_films': 2}
+
+
 def test_genre_rankings_best_rated_requires_existing_user(client, monkeypatch) -> None:
     monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: None)
 
@@ -185,4 +208,23 @@ def test_logs_films_route_returns_history_rows_for_collage(client, monkeypatch) 
     assert response.json()[0]['poster_url'] == 'https://img/possession.jpg'
     assert response.json()[0]['genres'] == ['Drama', 'Horror']
     assert response.json()[0]['countries'] == ['France', 'West Germany']
-    assert calls == {'user_id': 'user-123', 'filters': {'min_rating': None, 'max_rating': None, 'min_runtime': None, 'max_runtime': None, 'decade_start': None, 'director_name': None, 'actor_name': None, 'country_code': None, 'genre_name': None, 'watched_month': None, 'watched_year': 2026}}
+    assert calls == {'user_id': 'user-123', 'filters': {'min_rating': None, 'max_rating': None, 'min_runtime': None, 'max_runtime': None, 'decade_start': None, 'director_name': None, 'actor_name': None, 'country_code': None, 'original_language': None, 'genre_name': None, 'watched_month': None, 'watched_year': 2026}}
+
+
+def test_films_route_passes_original_language_filter(client, monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    monkeypatch.setattr(api_dependencies, 'get_user_id_by_username', lambda username: 'user-123')
+
+    def fake_filtered_films(user_id: str, **filters):
+        calls['user_id'] = user_id
+        calls['filters'] = filters
+        return []
+
+    monkeypatch.setattr(analytics_route, 'get_filtered_films', fake_filtered_films)
+
+    response = client.get('/analytics/films', params={'username': 'ppino', 'original_language': 'Japanese'})
+
+    assert response.status_code == 200
+    assert response.json() == []
+    assert calls == {'user_id': 'user-123', 'filters': {'min_rating': None, 'max_rating': None, 'min_runtime': None, 'max_runtime': None, 'decade_start': None, 'director_name': None, 'actor_name': None, 'country_code': None, 'original_language': 'Japanese', 'genre_name': None, 'watched_month': None, 'watched_year': None}}

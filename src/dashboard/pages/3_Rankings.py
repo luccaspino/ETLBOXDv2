@@ -40,7 +40,7 @@ ranking_sections = [
     ("directors", "Diretores"),
     ("actors", "Atores"),
     ("genres", "Gêneros"),
-    ("countries", "Países"),
+    ("languages", "Idiomas originais"),
 ]
 
 
@@ -91,8 +91,6 @@ with min_col1:
 with min_col2:
     min_best_rated = st.number_input("Mínimo para melhor avaliados", min_value=1, value=3, step=1)
 
-country_name_to_code: dict[str, str] = {}
-
 try:
     with st.spinner("Carregando rankings..."):
         rankings_bundle = get_rankings_bundle(
@@ -100,12 +98,6 @@ try:
             min_most_watched=int(min_most_watched),
             min_best_rated=int(min_best_rated),
         )
-        filter_options = rankings_bundle["filter_options"]
-        country_name_to_code = {
-            item["name"]: item["code"]
-            for item in filter_options.get("country_options", [])
-            if item.get("name") and item.get("code")
-        }
         rankings_by_category = rankings_bundle["rankings_by_category"]
 except ApiClientError as err:
     render_api_error(err)
@@ -136,16 +128,14 @@ if drilldown:
     selected_name = str(drilldown.get("name") or "").strip()
     if selected_category and selected_name:
         filter_payload: dict[str, object] = {}
-        if selected_category == "countries":
-            country_code = country_name_to_code.get(selected_name)
-            if country_code:
-                filter_payload["country_code"] = country_code
-        elif selected_category == "genres":
+        if selected_category == "genres":
             filter_payload["genre_name"] = selected_name
         elif selected_category == "directors":
             filter_payload["director_name"] = selected_name
         elif selected_category == "actors":
             filter_payload["actor_name"] = selected_name
+        elif selected_category == "languages":
+            filter_payload["original_language"] = selected_name
 
         st.markdown("---")
         st.subheader(f"Filmes relacionados: {selected_name}")

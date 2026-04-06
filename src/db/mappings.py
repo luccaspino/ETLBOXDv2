@@ -39,6 +39,39 @@ LANGUAGE_TO_CODE = {
     "finnish": "fi",
 }
 
+LANGUAGE_CODE_TO_NAME = {
+    "ar": "Arabic",
+    "cs": "Czech",
+    "da": "Danish",
+    "de": "German",
+    "el": "Greek",
+    "en": "English",
+    "es": "Spanish",
+    "fa": "Persian",
+    "fi": "Finnish",
+    "fr": "French",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "hu": "Hungarian",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "nl": "Dutch",
+    "no": "Norwegian",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "pt-BR": "Portuguese (Brazil)",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "sv": "Swedish",
+    "th": "Thai",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "yue": "Cantonese",
+    "zh": "Chinese",
+}
+
 COUNTRY_CODE_TO_NAME = {
     "AE": "United Arab Emirates",
     "AR": "Argentina",
@@ -150,6 +183,25 @@ def normalize_language(value: str | None) -> str | None:
     return truncated or None
 
 
+def language_name(value: str | None) -> str | None:
+    if not value:
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+
+    if normalized in LANGUAGE_CODE_TO_NAME:
+        return LANGUAGE_CODE_TO_NAME[normalized]
+
+    lower = normalized.lower()
+    if lower in LANGUAGE_TO_CODE:
+        mapped = LANGUAGE_TO_CODE[lower]
+        return LANGUAGE_CODE_TO_NAME.get(mapped, normalized)
+
+    return normalized
+
+
 def country_code(raw: str) -> str | None:
     if not raw:
         return None
@@ -180,7 +232,9 @@ def country_name(value: str | None) -> str | None:
 __all__ = [
     "COUNTRY_CODE_TO_NAME",
     "LANGUAGE_TO_CODE",
+    "LANGUAGE_CODE_TO_NAME",
     "country_code",
     "country_name",
+    "language_name",
     "normalize_language",
 ]

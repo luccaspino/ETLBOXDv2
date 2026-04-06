@@ -92,3 +92,22 @@ def test_get_logged_films_can_raise_404_when_legacy_fallback_is_disabled(monkeyp
         assert err.status_code == 404
     else:  # pragma: no cover
         raise AssertionError("Era esperado propagar ApiClientError com status 404.")
+
+
+def test_get_rankings_bundle_uses_languages_category(monkeypatch) -> None:
+    calls: list[tuple[str, str, int]] = []
+
+    monkeypatch.setattr(api_client, "get_filter_options", lambda username: {})
+
+    def fake_get_rankings(username: str, category: str, order_by: str, *, min_films: int):
+        calls.append((category, order_by, min_films))
+        return [{"nome": f"{category}:{order_by}", "filmes_assistidos": 1, "media_nota_pessoal": 4.0}]
+
+    monkeypatch.setattr(api_client, "get_rankings", fake_get_rankings)
+
+    payload = api_client.get_rankings_bundle("ppino", min_most_watched=1, min_best_rated=3)
+
+    assert "languages" in payload["rankings_by_category"]
+    assert "countries" not in payload["rankings_by_category"]
+    assert ("languages", "most-watched", 1) in calls
+    assert ("languages", "best-rated", 3) in calls

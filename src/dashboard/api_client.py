@@ -321,7 +321,7 @@ def get_rankings_bundle(
     min_most_watched: int,
     min_best_rated: int,
 ) -> dict[str, Any]:
-    categories = ("directors", "actors", "genres", "countries")
+    categories = ("directors", "actors", "genres", "languages")
     calls: dict[str, Callable[[], Any]] = {
         "filter_options": lambda: get_filter_options(username),
     }

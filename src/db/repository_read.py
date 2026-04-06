@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.db.connection import get_cursor
-from src.db.mappings import country_name
+from src.db.mappings import country_name, language_name, normalize_language
 from src.db.repository_common import (
     LATEST_USER_FILMS_CTE,
     _normalize_number,
@@ -23,6 +23,7 @@ def _build_filtered_clause(
     director_name: str | None = None,
     actor_name: str | None = None,
     country_code: str | None = None,
+    original_language: str | None = None,
     genre_name: str | None = None,
     watched_month: int | None = None,
     watched_year: int | None = None,
@@ -91,6 +92,11 @@ def _build_filtered_clause(
             """
         )
         params.append(country_code.strip().upper())
+
+    normalized_language = normalize_language(original_language)
+    if normalized_language:
+        where.append("f.original_language = %s")
+        params.append(normalized_language)
 
     genre_like = _normalize_text_filter(genre_name)
     if genre_like:
@@ -441,10 +447,17 @@ def _get_category_rankings(
         "genre": {
             "select_name": "g.name",
             "join_sql": "JOIN film_genres fg ON fg.film_id = uf.film_id JOIN genres g ON g.id = fg.genre_id",
+            "where_clauses": [],
         },
         "country": {
             "select_name": "fc.country_code",
             "join_sql": "JOIN film_countries fc ON fc.film_id = uf.film_id",
+            "where_clauses": [],
+        },
+        "language": {
+            "select_name": "f.original_language",
+            "join_sql": "JOIN films f ON f.id = uf.film_id",
+            "where_clauses": ["f.original_language IS NOT NULL", "BTRIM(f.original_language) <> ''"],
         },
     }
     config = config_map.get(category)
@@ -455,7 +468,10 @@ def _get_category_rankings(
     if order_sql is None:
         raise ValueError(f"Ordenacao de ranking nao suportada: {order_by}")
 
-    rating_filter = "WHERE uf.rating IS NOT NULL" if order_by == "best_rated" else ""
+    where_clauses = list(config.get("where_clauses", []))
+    if order_by == "best_rated":
+        where_clauses.append("uf.rating IS NOT NULL")
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     limit_sql = "LIMIT %s" if limit is not None else ""
     params: list[Any] = [user_id, min_films]
     if limit is not None:
@@ -471,7 +487,7 @@ def _get_category_rankings(
                 ROUND(AVG(uf.rating)::NUMERIC, 2) AS media_nota_pessoal
             FROM latest_user_films uf
             {config['join_sql']}
-            {rating_filter}
+            {where_sql}
             GROUP BY 1
             HAVING COUNT(DISTINCT uf.film_id) >= %s
             ORDER BY {order_sql}
@@ -485,6 +501,8 @@ def _get_category_rankings(
     for nome, filmes_assistidos, media_nota_pessoal in rows:
         if category == "country":
             nome = country_name(nome) or nome
+        elif category == "language":
+            nome = language_name(nome) or nome
         output.append(
             {
                 "nome": nome,
@@ -505,6 +523,22 @@ def get_country_rankings(
     return _get_category_rankings(
         user_id,
         category="country",
+        order_by=order_by,
+        min_films=min_films,
+        limit=limit,
+    )
+
+
+def get_language_rankings(
+    user_id: str,
+    *,
+    order_by: str = "most_watched",
+    min_films: int = 1,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    return _get_category_rankings(
+        user_id,
+        category="language",
         order_by=order_by,
         min_films=min_films,
         limit=limit,
@@ -598,6 +632,7 @@ def _fetch_filtered_film_rows(
     director_name: str | None = None,
     actor_name: str | None = None,
     country_code: str | None = None,
+    original_language: str | None = None,
     genre_name: str | None = None,
     watched_month: int | None = None,
     watched_year: int | None = None,
@@ -612,6 +647,7 @@ def _fetch_filtered_film_rows(
         director_name=director_name,
         actor_name=actor_name,
         country_code=country_code,
+        original_language=original_language,
         genre_name=genre_name,
         watched_month=watched_month,
         watched_year=watched_year,
@@ -938,6 +974,7 @@ def get_filtered_films(
     director_name: str | None = None,
     actor_name: str | None = None,
     country_code: str | None = None,
+    original_language: str | None = None,
     genre_name: str | None = None,
     watched_month: int | None = None,
     watched_year: int | None = None,
@@ -952,6 +989,7 @@ def get_filtered_films(
         director_name=director_name,
         actor_name=actor_name,
         country_code=country_code,
+        original_language=original_language,
         genre_name=genre_name,
         watched_month=watched_month,
         watched_year=watched_year,
@@ -970,6 +1008,7 @@ def get_logged_films(
     director_name: str | None = None,
     actor_name: str | None = None,
     country_code: str | None = None,
+    original_language: str | None = None,
     genre_name: str | None = None,
     watched_month: int | None = None,
     watched_year: int | None = None,
@@ -984,6 +1023,7 @@ def get_logged_films(
         director_name=director_name,
         actor_name=actor_name,
         country_code=country_code,
+        original_language=original_language,
         genre_name=genre_name,
         watched_month=watched_month,
         watched_year=watched_year,
