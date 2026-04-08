@@ -4,6 +4,10 @@ import re
 from urllib.parse import urlparse
 
 LETTERBOXD_HOSTS = {"letterboxd.com", "www.letterboxd.com", "boxd.it", "www.boxd.it"}
+_GLOBAL_FILM_RE = re.compile(r"^/film/([^/]+)$")
+_GLOBAL_FILM_PAGE_RE = re.compile(r"^/film/([^/]+)/(\d+)$")
+_USER_FILM_RE = re.compile(r"^/[^/]+/film/([^/]+)$")
+_USER_FILM_PAGE_RE = re.compile(r"^/[^/]+/film/([^/]+)/(\d+)$")
 
 COUNTRY_SLUG_TO_CODE = {
     "usa": "US",
@@ -57,6 +61,15 @@ COUNTRY_SLUG_TO_CODE = {
 }
 
 
+def _extract_canonical_film_slug(path: str) -> str | None:
+    clean_path = (path or "").rstrip("/")
+    for pattern in (_GLOBAL_FILM_RE, _GLOBAL_FILM_PAGE_RE, _USER_FILM_RE, _USER_FILM_PAGE_RE):
+        match = pattern.match(clean_path)
+        if match:
+            return match.group(1)
+    return None
+
+
 def _normalize_film_url(uri: str) -> str:
     uri = uri.strip()
     if uri.startswith(("http://", "https://")):
@@ -67,10 +80,9 @@ def _normalize_film_url(uri: str) -> str:
         normalized = f"https://letterboxd.com/{uri}".rstrip("/")
 
     parsed = urlparse(normalized)
-    path = parsed.path or ""
-    match = re.match(r"^/film/([^/]+)/\d+$", path.rstrip("/"))
-    if match:
-        return f"https://letterboxd.com/film/{match.group(1)}"
+    slug = _extract_canonical_film_slug(parsed.path or "")
+    if slug:
+        return f"https://letterboxd.com/film/{slug}/"
     return normalized
 
 
@@ -87,13 +99,7 @@ def _to_global_film_url(url: str) -> str:
         return url.rstrip("/")
 
     parsed = urlparse(url)
-    path = parsed.path or ""
-    film_idx = path.find("/film/")
-    if film_idx == -1:
-        return url.rstrip("/")
-
-    film_path = path[film_idx:].rstrip("/")
-    match = re.match(r"^(/film/[^/]+)(?:/\d+)?$", film_path)
-    if match:
-        film_path = match.group(1)
-    return f"https://letterboxd.com{film_path}".rstrip("/")
+    slug = _extract_canonical_film_slug(parsed.path or "")
+    if slug:
+        return f"https://letterboxd.com/film/{slug}/"
+    return url.rstrip("/")

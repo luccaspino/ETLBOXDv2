@@ -111,11 +111,11 @@ def test_parse_film_page_ignores_show_all_placeholders() -> None:
 
 def test_scrape_one_retries_connection_reset_error(monkeypatch) -> None:
     scraper = LetterboxdScraper(retries=1)
-    fetch_calls = {"count": 0}
+    fetch_calls: list[str] = []
 
     def fake_fetch_html(url: str) -> tuple[str, str, int, str]:
-        fetch_calls["count"] += 1
-        if fetch_calls["count"] == 1:
+        fetch_calls.append(url)
+        if len(fetch_calls) == 1:
             raise ConnectionResetError(104, "Connection reset by peer")
         return ("<html></html>", "https://letterboxd.com/film/test-film/", 200, "HTTP/1.1")
 
@@ -132,7 +132,11 @@ def test_scrape_one_retries_connection_reset_error(monkeypatch) -> None:
     assert result.attempts == 2
     assert result.http_status == 200
     assert result.http_version == "HTTP/1.1"
-    assert fetch_calls["count"] == 2
+    assert fetch_calls == [
+        "https://boxd.it/test",
+        "https://boxd.it/test",
+        "https://letterboxd.com/film/test-film/",
+    ]
 
 
 def test_scrape_one_reuses_review_page_data_when_canonical_fetch_fails(monkeypatch) -> None:
@@ -158,7 +162,7 @@ def test_scrape_one_reuses_review_page_data_when_canonical_fetch_fails(monkeypat
 
     assert result.ok
     assert result.title == "Test Film"
-    assert result.letterboxd_url == "https://letterboxd.com/film/test-film"
+    assert result.letterboxd_url == "https://letterboxd.com/film/test-film/"
     assert result.requested_url == "https://boxd.it/test"
     assert result.attempts == 1
     assert result.used_fallback is True
@@ -189,7 +193,7 @@ def test_scrape_one_keeps_failing_when_review_title_cannot_be_cleaned(monkeypatc
 
     assert not result.ok
     assert result.scrape_error == "canonical fetch failed for review/log URL"
-    assert result.letterboxd_url == "https://letterboxd.com/film/test-film"
+    assert result.letterboxd_url == "https://letterboxd.com/film/test-film/"
     assert result.requested_url == "https://boxd.it/test"
     assert result.attempts == 1
     assert result.used_fallback is True
@@ -206,7 +210,7 @@ def test_scrape_one_recovers_from_403_review_redirect(monkeypatch) -> None:
                 request=httpx.Request("GET", "https://letterboxd.com/user/film/test-film/1/"),
             )
             raise httpx.HTTPStatusError("403", request=response.request, response=response)
-        if url == "https://letterboxd.com/film/test-film":
+        if url == "https://letterboxd.com/film/test-film/":
             return ("<html></html>", "https://letterboxd.com/film/test-film/", 200, "HTTP/2")
         raise AssertionError(f"URL inesperada: {url}")
 
