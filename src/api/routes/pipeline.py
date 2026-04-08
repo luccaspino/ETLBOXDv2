@@ -9,13 +9,13 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 
 from src.api.schemas import PipelineRunResponse
-from src.config import get_int_env
-from src.pipeline.validator import (
+from src.api.validators.pipeline import (
     save_upload_to_temp,
     validate_request_size,
     validate_upload_metadata,
     validate_zip_contents,
 )
+from src.config import get_int_env
 from src.pipeline.orchestrator import run
 
 logger = logging.getLogger(__name__)

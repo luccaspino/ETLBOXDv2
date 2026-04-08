@@ -1,9 +1,9 @@
 def test_smoke_imports() -> None:
     from src.pipeline.orchestrator import run  # noqa: F401
-    from src.pipeline.run_pipeline import run as cli_run  # noqa: F401
+    from scripts.run_pipeline import main as cli_main  # noqa: F401
 
     assert callable(run)
-    assert callable(cli_run)
+    assert callable(cli_main)
 
 
 def test_api_routes_registered() -> None:

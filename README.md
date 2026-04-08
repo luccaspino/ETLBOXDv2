@@ -20,10 +20,12 @@ The project lets you:
 ## Main folders
 
 - `src/api`: FastAPI routes and schemas
+- `src/api/validators`: request/upload validation for API endpoints
 - `src/dashboard`: Streamlit app and pages
 - `src/db`: database access, mappings, and write/load logic
 - `src/ingestion`: ZIP parsing and scraping
-- `src/pipeline`: orchestration and validation
+- `src/pipeline`: orchestration only
+- `scripts`: local CLI/benchmark entrypoints
 - `db/init`: local PostgreSQL bootstrap SQL
 - `tests`: automated tests
 

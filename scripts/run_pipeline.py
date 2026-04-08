@@ -4,7 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from src.pipeline.orchestrator import run
+from src.pipeline.orchestrator import run as run_pipeline
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -38,7 +38,7 @@ def main() -> None:
     if not zip_file.exists():
         raise SystemExit(f"ZIP nao encontrado: {zip_file}")
 
-    summary = run(
+    summary = run_pipeline(
         zip_path=str(zip_file),
         workers=args.workers,
         timeout=args.timeout,
@@ -53,9 +53,6 @@ def main() -> None:
         max_failed_ratio=max(0.0, min(1.0, args.max_failed_ratio)),
     )
     print(summary)
-
-
-__all__ = ["run", "build_arg_parser", "main"]
 
 
 if __name__ == "__main__":
