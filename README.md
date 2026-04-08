@@ -65,7 +65,7 @@ By default the pipeline is strict: if scraping is incomplete, the database load 
 - Scraping uses pooled HTTP connections to reduce repeated TLS/connect overhead.
 - The dashboard caches deterministic GET requests to reduce rerun latency.
 - The upload pipeline still depends on an external site, so scrape speed can vary based on network quality, rate limiting, and Letterboxd behavior.
-- The first requisition may take a minute to be executed due to the waking up time of the servers (currently hosted in free plans)
+- The first request may take a minute to be executed due to the waking up time of the servers (currently hosted on free plans)
 
 ## Deployment notes
 
