@@ -64,7 +64,8 @@ By default the pipeline is strict: if scraping is incomplete, the database load 
 ## Notes on performance
 
 - ZIP parsing is optimized to read only the columns used by the pipeline.
-- Scraping uses pooled HTTP connections to reduce repeated TLS/connect overhead.
+- Scraping uses a shared `httpx` client with connection pooling and optional HTTP/2 support.
+- Scraping logs aggregate latency metrics (`p50`, `p95`, `p99`) to help distinguish network slowness from retries/timeouts.
 - The dashboard caches deterministic GET requests to reduce rerun latency.
 - The upload pipeline still depends on an external site, so scrape speed can vary based on network quality, rate limiting, and Letterboxd behavior.
 - The first request may take a minute to be executed due to the waking up time of the servers (currently hosted on free plans)

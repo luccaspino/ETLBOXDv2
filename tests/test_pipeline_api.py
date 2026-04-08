@@ -57,6 +57,9 @@ def test_pipeline_run_accepts_valid_zip_with_extra_csv(client, monkeypatch) -> N
         'user_films_loaded': 1170,
         'watchlist_loaded': 616,
     }
+    assert captured["workers"] == 20
+    assert captured["timeout"] == 10
+    assert captured["request_interval"] == 0.0
     assert captured["progress_every"] == 10
     assert captured["require_complete_scrape"] is True
     assert captured["max_failed_ratio"] == 0.0
