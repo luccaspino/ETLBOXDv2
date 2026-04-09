@@ -53,10 +53,6 @@ def set_active_username(username: str | None) -> None:
         pass
 
 
-def clear_active_username() -> None:
-    set_active_username(None)
-
-
 def set_last_pipeline_summary(summary: dict[str, Any] | None) -> None:
     st.session_state["last_pipeline_summary"] = summary
 
@@ -64,4 +60,3 @@ def set_last_pipeline_summary(summary: dict[str, Any] | None) -> None:
 def get_last_pipeline_summary() -> dict[str, Any] | None:
     summary = st.session_state.get("last_pipeline_summary")
     return summary if isinstance(summary, dict) else None
-

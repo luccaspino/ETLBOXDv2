@@ -362,7 +362,9 @@ class LetterboxdScraper:
 
                 global_film_url = _to_global_film_url(final_url)
                 must_refetch_canonical = _is_review_like_page(final_url) or _looks_like_review_title(result.title)
-                if global_film_url != final_url.rstrip("/") or must_refetch_canonical:
+                normalized_final_url = final_url.rstrip("/")
+                normalized_global_url = global_film_url.rstrip("/")
+                if normalized_global_url != normalized_final_url or must_refetch_canonical:
                     try:
                         html2, final2, status_code2, http_version2 = self._fetch_html(global_film_url)
                         canonical = _parse_film_page(final2, html2)

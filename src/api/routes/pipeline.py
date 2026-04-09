@@ -16,6 +16,7 @@ from src.api.validators.pipeline import (
     validate_zip_contents,
 )
 from src.config import get_int_env
+from src.db.connection import DatabaseUnavailableError
 from src.pipeline.orchestrator import run
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ def run_pipeline(
     retries: int = Form(1),
     retry_backoff: float = Form(0.25),
     request_interval: float = Form(0.0),
-    progress_every: int = Form(10),
+    progress_every: int = Form(25),
     auto_retry_failed: bool = Form(True),
     retry_failed_passes: int = Form(6),
     allow_partial: bool = Form(False),
@@ -107,6 +108,8 @@ def run_pipeline(
         )
         return PipelineRunResponse(**summary)
     except HTTPException:
+        raise
+    except DatabaseUnavailableError:
         raise
     except RuntimeError as err:
         logger.warning("Falha controlada na execucao do pipeline: %s", err)

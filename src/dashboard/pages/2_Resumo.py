@@ -42,15 +42,6 @@ from src.dashboard.components.tables import render_records_table
 from src.dashboard.state import get_active_username, initialize_state
 
 
-def _extract_year_from_date(date_text: str | None) -> int | None:
-    if not date_text or len(date_text) < 4:
-        return None
-    try:
-        return int(date_text[:4])
-    except ValueError:
-        return None
-
-
 def _coerce_selected_int(value: object, *, minimum: int, maximum: int) -> int | None:
     try:
         integer_value = int(value)
@@ -103,7 +94,7 @@ initialize_state()
 username = get_active_username()
 
 st.title("Resumo")
-st.caption("KPIs principais, historico de atividade e distribuicoes do usuario ativo.")
+st.caption("KPIs principais, histórico de atividade e distribuições do usuário ativo.")
 
 with st.sidebar:
     render_sidebar_nav(username)

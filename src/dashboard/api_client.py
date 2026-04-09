@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 from urllib.parse import quote
@@ -17,6 +18,7 @@ except Exception:  # pragma: no cover
 
 _SHARED_HTTP_CLIENTS: dict[str, httpx.Client] = {}
 _SHARED_HTTP_CLIENTS_LOCK = threading.Lock()
+_GET_RETRY_ATTEMPTS = 3
 
 
 def _cache_data(ttl: int = 120, max_entries: int = 128):
@@ -93,6 +95,16 @@ def _extract_error_detail(response: httpx.Response) -> str:
     return "Erro desconhecido retornado pela API."
 
 
+def _retry_delay_seconds(response: httpx.Response, attempt: int) -> float:
+    retry_after = response.headers.get("Retry-After", "").strip()
+    if retry_after:
+        try:
+            return max(0.0, float(retry_after))
+        except ValueError:
+            pass
+    return float(attempt)
+
+
 def _request_json(
     method: str,
     path: str,
@@ -104,33 +116,42 @@ def _request_json(
 ) -> Any:
     base_url = get_api_base_url()
     client = _get_http_client(base_url)
+    method_upper = method.upper()
+    max_attempts = _GET_RETRY_ATTEMPTS if method_upper == "GET" else 1
 
-    try:
-        response = client.request(
-            method=method,
-            url=path,
-            params=params,
-            data=data,
-            files=files,
-            timeout=timeout,
-        )
-    except httpx.RequestError as err:
-        raise ApiClientError(
-            f"Nao foi possivel conectar a API em {base_url}.",
-        ) from err
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = client.request(
+                method=method,
+                url=path,
+                params=params,
+                data=data,
+                files=files,
+                timeout=timeout,
+            )
+        except httpx.RequestError as err:
+            raise ApiClientError(
+                f"Nao foi possivel conectar a API em {base_url}.",
+            ) from err
 
-    if response.is_error:
-        detail = _extract_error_detail(response)
-        raise ApiClientError(
-            detail,
-            status_code=response.status_code,
-            detail=detail,
-        )
+        if response.status_code == 503 and method_upper == "GET" and attempt < max_attempts:
+            time.sleep(_retry_delay_seconds(response, attempt))
+            continue
 
-    try:
-        return response.json()
-    except ValueError as err:
-        raise ApiClientError("A API retornou uma resposta JSON invalida.") from err
+        if response.is_error:
+            detail = _extract_error_detail(response)
+            raise ApiClientError(
+                detail,
+                status_code=response.status_code,
+                detail=detail,
+            )
+
+        try:
+            return response.json()
+        except ValueError as err:
+            raise ApiClientError("A API retornou uma resposta JSON invalida.") from err
+
+    raise ApiClientError("A API retornou um erro inesperado sem resposta valida.")
 
 
 def _run_parallel_calls(calls: dict[str, Callable[[], Any]]) -> dict[str, Any]:

@@ -135,7 +135,6 @@ def test_scrape_one_retries_connection_reset_error(monkeypatch) -> None:
     assert fetch_calls == [
         "https://boxd.it/test",
         "https://boxd.it/test",
-        "https://letterboxd.com/film/test-film/",
     ]
 
 
@@ -168,6 +167,27 @@ def test_scrape_one_reuses_review_page_data_when_canonical_fetch_fails(monkeypat
     assert result.used_fallback is True
     assert result.latency_ms is not None
     assert fetch_calls["count"] == 2
+
+
+def test_scrape_one_does_not_refetch_when_url_is_already_canonical(monkeypatch) -> None:
+    scraper = LetterboxdScraper(retries=0)
+    fetch_calls: list[str] = []
+
+    def fake_fetch_html(url: str) -> tuple[str, str, int, str]:
+        fetch_calls.append(url)
+        return ("<html></html>", "https://letterboxd.com/film/test-film/", 200, "HTTP/2")
+
+    def fake_parse_film_page(final_url: str, html: str) -> FilmScrapeResult:
+        return FilmScrapeResult(letterboxd_url=final_url.rstrip("/"), title="Test Film")
+
+    monkeypatch.setattr(scraper, "_fetch_html", fake_fetch_html)
+    monkeypatch.setattr("src.ingestion.scraper._parse_film_page", fake_parse_film_page)
+
+    result = scraper.scrape_one("https://boxd.it/test")
+
+    assert result.ok
+    assert result.used_fallback is False
+    assert fetch_calls == ["https://boxd.it/test"]
 
 
 def test_scrape_one_keeps_failing_when_review_title_cannot_be_cleaned(monkeypatch) -> None:

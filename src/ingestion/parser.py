@@ -1,16 +1,13 @@
-import zipfile
 import logging
-import pandas as pd
 import warnings
+import zipfile
 from io import BytesIO
 from pathlib import Path
 
+import pandas as pd
+
 from src.ingestion.scraper_urls import _to_global_film_url
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s | %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 

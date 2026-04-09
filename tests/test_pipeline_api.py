@@ -4,6 +4,7 @@ import io
 import zipfile
 
 from src.api.routes import pipeline as pipeline_route
+from src.db.connection import DatabaseUnavailableError
 
 
 def _csv(rows: list[list[str]]) -> str:
@@ -60,7 +61,7 @@ def test_pipeline_run_accepts_valid_zip_with_extra_csv(client, monkeypatch) -> N
     assert captured["workers"] == 20
     assert captured["timeout"] == 10
     assert captured["request_interval"] == 0.0
-    assert captured["progress_every"] == 10
+    assert captured["progress_every"] == 25
     assert captured["require_complete_scrape"] is True
     assert captured["max_failed_ratio"] == 0.0
 
@@ -128,3 +129,25 @@ def test_pipeline_run_exposes_runtime_error_detail(client, monkeypatch) -> None:
 
     assert response.status_code == 422
     assert response.json()['detail'] == 'Scraping incompleto: 32 URL(s) falharam.'
+
+
+def test_pipeline_run_returns_503_when_database_is_unavailable(client, monkeypatch) -> None:
+    pipeline_route._PIPELINE_REQUEST_HISTORY.clear()
+    monkeypatch.setenv('PIPELINE_MAX_ZIP_MB', '5')
+    monkeypatch.setenv('PIPELINE_RATE_LIMIT_WINDOW_SECONDS', '900')
+    monkeypatch.setenv('PIPELINE_RATE_LIMIT_MAX_REQUESTS', '5')
+
+    monkeypatch.setattr(
+        pipeline_route,
+        'run',
+        lambda **kwargs: (_ for _ in ()).throw(DatabaseUnavailableError('Banco temporariamente indisponivel.')),
+    )
+
+    response = client.post(
+        '/pipeline/run',
+        files={'file': ('letterboxd.zip', _sample_zip_bytes(), 'application/zip')},
+    )
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Banco temporariamente indisponivel.'
+    assert response.headers['Retry-After'] == '3'

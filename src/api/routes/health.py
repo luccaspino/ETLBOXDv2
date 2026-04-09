@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import logging
+from fastapi import APIRouter
 
-from fastapi import APIRouter, HTTPException
-
-from src.db.connection import get_connection
-
-logger = logging.getLogger(__name__)
+from src.db.connection import get_cursor
 
 router = APIRouter(tags=["health"])
 
@@ -18,10 +14,7 @@ def health_check() -> dict[str, str]:
 
 @router.get("/health/db")
 def db_health_check() -> dict[str, str]:
-    try:
-        conn = get_connection()
-        conn.close()
-        return {"status": "ok", "database": "reachable"}
-    except Exception as err:
-        logger.warning("Database health check failed: %s", err)
-        raise HTTPException(status_code=503, detail="Database unavailable.") from err
+    with get_cursor() as cur:
+        cur.execute("SELECT 1")
+        cur.fetchone()
+    return {"status": "ok", "database": "reachable"}

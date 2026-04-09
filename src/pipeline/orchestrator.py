@@ -13,6 +13,11 @@ from src.ingestion.parser import parse_zip
 from src.ingestion.scraper import LetterboxdScraper, write_scrape_failures
 
 
+def _configure_noisy_loggers() -> None:
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
 def _summarize_scrape_failures(scrape_results: list) -> list[tuple[str, int, list[str]]]:
     reasons = Counter()
     samples_by_reason: dict[str, list[str]] = defaultdict(list)
@@ -76,6 +81,7 @@ def run(
     require_complete_scrape: bool = True,
     max_failed_ratio: float = 0.0,
 ) -> dict[str, int | str]:
+    _configure_noisy_loggers()
     started_at = time.perf_counter()
     logging.info("Pipeline iniciado para ZIP: %s", zip_path)
 

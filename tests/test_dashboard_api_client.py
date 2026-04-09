@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import httpx
+
 from src.dashboard import api_client
 
 
@@ -111,3 +113,56 @@ def test_get_rankings_bundle_uses_languages_category(monkeypatch) -> None:
     assert "countries" not in payload["rankings_by_category"]
     assert ("languages", "most-watched", 1) in calls
     assert ("languages", "best-rated", 3) in calls
+
+
+def test_request_json_retries_get_when_backend_returns_503(monkeypatch) -> None:
+    responses = iter(
+        [
+            httpx.Response(
+                503,
+                json={"detail": "Banco temporariamente indisponivel."},
+                headers={"Retry-After": "0"},
+            ),
+            httpx.Response(200, json={"username": "ppino"}),
+        ]
+    )
+    captured_sleeps: list[float] = []
+
+    class FakeClient:
+        def request(self, **kwargs):
+            return next(responses)
+
+    monkeypatch.setattr(api_client, "get_api_base_url", lambda: "https://api.example.com")
+    monkeypatch.setattr(api_client, "_get_http_client", lambda base_url: FakeClient())
+    monkeypatch.setattr(api_client.time, "sleep", lambda seconds: captured_sleeps.append(seconds))
+
+    payload = api_client._request_json("GET", "/users/ppino")
+
+    assert payload == {"username": "ppino"}
+    assert captured_sleeps == [0.0]
+
+
+def test_request_json_does_not_retry_post_when_backend_returns_503(monkeypatch) -> None:
+    calls = {"count": 0}
+
+    class FakeClient:
+        def request(self, **kwargs):
+            calls["count"] += 1
+            return httpx.Response(
+                503,
+                json={"detail": "Banco temporariamente indisponivel."},
+                headers={"Retry-After": "0"},
+            )
+
+    monkeypatch.setattr(api_client, "get_api_base_url", lambda: "https://api.example.com")
+    monkeypatch.setattr(api_client, "_get_http_client", lambda base_url: FakeClient())
+
+    try:
+        api_client._request_json("POST", "/pipeline/run")
+    except api_client.ApiClientError as err:
+        assert err.status_code == 503
+        assert err.detail == "Banco temporariamente indisponivel."
+    else:  # pragma: no cover
+        raise AssertionError("Era esperado propagar ApiClientError no POST sem retry.")
+
+    assert calls["count"] == 1
