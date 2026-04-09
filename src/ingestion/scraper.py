@@ -148,6 +148,30 @@ def _compute_metrics(results: list[FilmScrapeResult], elapsed_s: float) -> Scrap
     )
 
 
+def _iter_exception_chain(err: BaseException) -> list[BaseException]:
+    chain: list[BaseException] = []
+    current: BaseException | None = err
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        chain.append(current)
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return chain
+
+
+def _looks_like_http2_transport_issue(err: BaseException) -> bool:
+    for item in _iter_exception_chain(err):
+        name = type(item).__name__
+        module = type(item).__module__
+        if isinstance(item, KeyError):
+            return True
+        if module.startswith("h2.") and name in {"ProtocolError", "StreamClosedError"}:
+            return True
+        if module.startswith("httpcore.") and name in {"RemoteProtocolError", "ReadError", "WriteError"}:
+            return True
+    return False
+
+
 class _GlobalRateLimiter:
     def __init__(self, min_interval_s: float) -> None:
         self.min_interval_s = max(0.0, float(min_interval_s))
@@ -193,9 +217,11 @@ class LetterboxdScraper:
         self.http2_enabled = _http2_dependencies_available()
         if not self.http2_enabled:
             logger.debug("Dependencia 'h2' ausente; scraper usara HTTP/1.1.")
-        self._client = self._build_http_client()
+        self._client_lock = threading.Lock()
+        self._stale_clients: list[httpx.Client] = []
+        self._client = self._build_http_client(http2_enabled=self.http2_enabled)
 
-    def _build_http_client(self) -> httpx.Client:
+    def _build_http_client(self, *, http2_enabled: bool) -> httpx.Client:
         return httpx.Client(
             timeout=httpx.Timeout(self.timeout_s),
             limits=httpx.Limits(
@@ -204,22 +230,49 @@ class LetterboxdScraper:
                 keepalive_expiry=60.0,
             ),
             follow_redirects=True,
-            http2=self.http2_enabled,
+            http2=http2_enabled,
             headers={
                 "User-Agent": self._user_agent,
                 "Accept-Language": "en-US,en;q=0.9,pt-BR;q=0.8",
             },
         )
 
+    def _downgrade_client_to_http11(self, err: BaseException) -> None:
+        with self._client_lock:
+            if not self.http2_enabled:
+                return
+            old_client = self._client
+            self.http2_enabled = False
+            self._client = self._build_http_client(http2_enabled=False)
+            self._stale_clients.append(old_client)
+
+        logger.warning(
+            "Instabilidade no transporte HTTP/2 detectada (%s). "
+            "Scraper fara downgrade para HTTP/1.1 nas proximas requisicoes.",
+            type(err).__name__,
+        )
+
     def close(self) -> None:
-        try:
-            self._client.close()
-        except Exception:
-            pass
+        clients = [self._client]
+        with self._client_lock:
+            clients.extend(self._stale_clients)
+            self._stale_clients.clear()
+        for client in clients:
+            try:
+                client.close()
+            except Exception:
+                pass
 
     def _fetch_html(self, url: str) -> tuple[str, str, int, str | None]:
         self._rate_limiter.acquire()
-        response = self._client.get(url)
+        try:
+            response = self._client.get(url)
+        except Exception as err:
+            if self.http2_enabled and _looks_like_http2_transport_issue(err):
+                self._downgrade_client_to_http11(err)
+                response = self._client.get(url)
+            else:
+                raise
         response.raise_for_status()
         return (
             response.text,

@@ -299,6 +299,47 @@ def test_scraper_uses_shared_httpx_client(monkeypatch) -> None:
     assert isinstance(captured["limits"], httpx.Limits)
 
 
+def test_fetch_html_downgrades_to_http11_after_http2_transport_issue(monkeypatch) -> None:
+    created_http2_flags: list[bool] = []
+
+    class FakeResponse:
+        def __init__(self, url: str, http_version: str) -> None:
+            self.text = "<html></html>"
+            self.url = url
+            self.status_code = 200
+            self.http_version = http_version
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, **kwargs) -> None:
+            self.http2 = kwargs["http2"]
+            created_http2_flags.append(self.http2)
+
+        def get(self, url: str):
+            if self.http2:
+                raise KeyError(11)
+            return FakeResponse("https://letterboxd.com/film/test-film/", "HTTP/1.1")
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("src.ingestion.scraper._http2_dependencies_available", lambda: True)
+    monkeypatch.setattr("src.ingestion.scraper.httpx.Client", FakeClient)
+
+    scraper = LetterboxdScraper(max_workers=2)
+    html, final_url, status, http_version = scraper._fetch_html("https://boxd.it/test")
+    scraper.close()
+
+    assert html == "<html></html>"
+    assert final_url == "https://letterboxd.com/film/test-film/"
+    assert status == 200
+    assert http_version == "HTTP/1.1"
+    assert scraper.http2_enabled is False
+    assert created_http2_flags == [True, False]
+
+
 def test_scrape_one_populates_latency_and_status(monkeypatch) -> None:
     scraper = LetterboxdScraper(retries=0)
 
