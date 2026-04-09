@@ -166,3 +166,24 @@ def test_request_json_does_not_retry_post_when_backend_returns_503(monkeypatch) 
         raise AssertionError("Era esperado propagar ApiClientError no POST sem retry.")
 
     assert calls["count"] == 1
+
+
+def test_request_json_hides_html_from_gateway_502(monkeypatch) -> None:
+    class FakeClient:
+        def request(self, **kwargs):
+            return httpx.Response(
+                502,
+                text="<!DOCTYPE html><html><head><title>502</title></head><body>bad gateway</body></html>",
+                headers={"content-type": "text/html"},
+            )
+
+    monkeypatch.setattr(api_client, "get_api_base_url", lambda: "https://api.example.com")
+    monkeypatch.setattr(api_client, "_get_http_client", lambda base_url: FakeClient())
+
+    try:
+        api_client._request_json("POST", "/pipeline/run")
+    except api_client.ApiClientError as err:
+        assert err.status_code == 502
+        assert err.detail == "O backend retornou 502 e esta temporariamente indisponivel. Tente novamente em instantes."
+    else:  # pragma: no cover
+        raise AssertionError("Era esperado propagar ApiClientError para 502 HTML.")

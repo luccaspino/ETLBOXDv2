@@ -19,6 +19,11 @@ except Exception:  # pragma: no cover
 _SHARED_HTTP_CLIENTS: dict[str, httpx.Client] = {}
 _SHARED_HTTP_CLIENTS_LOCK = threading.Lock()
 _GET_RETRY_ATTEMPTS = 3
+_TRANSIENT_HTTP_STATUS_MESSAGES = {
+    502: "O backend retornou 502 e esta temporariamente indisponivel. Tente novamente em instantes.",
+    503: "O backend esta temporariamente indisponivel. Tente novamente em instantes.",
+    504: "A API demorou demais para responder. Tente novamente em instantes.",
+}
 
 
 def _cache_data(ttl: int = 120, max_entries: int = 128):
@@ -84,14 +89,28 @@ atexit.register(_close_http_clients)
 
 
 def _extract_error_detail(response: httpx.Response) -> str:
+    def _looks_like_html_document(text: str) -> bool:
+        normalized = text.lstrip().lower()
+        return normalized.startswith("<!doctype html") or normalized.startswith("<html")
+
     try:
         payload = response.json()
     except ValueError:
-        return response.text.strip() or "Resposta de erro sem detalhe."
+        raw_text = response.text.strip()
+        if response.status_code in _TRANSIENT_HTTP_STATUS_MESSAGES:
+            return _TRANSIENT_HTTP_STATUS_MESSAGES[response.status_code]
+        if raw_text and _looks_like_html_document(raw_text):
+            return (
+                f"A infraestrutura da API retornou HTTP {response.status_code}. "
+                "Tente novamente em instantes."
+            )
+        return raw_text or "Resposta de erro sem detalhe."
 
     detail = payload.get("detail")
     if isinstance(detail, str) and detail.strip():
         return detail.strip()
+    if response.status_code in _TRANSIENT_HTTP_STATUS_MESSAGES:
+        return _TRANSIENT_HTTP_STATUS_MESSAGES[response.status_code]
     return "Erro desconhecido retornado pela API."
 
 
