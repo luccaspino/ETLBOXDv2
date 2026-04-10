@@ -7,7 +7,8 @@ The project lets you:
 - upload a Letterboxd ZIP export
 - enrich films with scraped metadata
 - persist user, watchlist, logs, people, genres, and countries in PostgreSQL
-- explore dashboards for summary metrics, rankings, filters, collages, and watchlist analysis
+- explore dashboards for summary metrics, rankings, filters, collages, watchlist analysis, and random picks
+- check backend and database readiness from the initial menu, with better handling for free-tier cold starts
 
 ## Stack
 
@@ -44,8 +45,8 @@ By default the pipeline is strict: if scraping is incomplete, the database load 
 
 ## Useful endpoints
 
-- `GET /health`
-- `GET /health/db`
+- `GET /health` - lightweight liveness check for the API service itself
+- `GET /health/db` - readiness check that confirms database connectivity
 - `POST /pipeline/run`
 - `GET /users/{username}`
 - `GET /analytics/kpis/main`
@@ -67,8 +68,9 @@ By default the pipeline is strict: if scraping is incomplete, the database load 
 - Scraping uses a shared `httpx` client with connection pooling and optional HTTP/2 support.
 - Scraping logs aggregate latency metrics (`p50`, `p95`, `p99`) to help distinguish network slowness from retries/timeouts.
 - The dashboard caches deterministic GET requests to reduce rerun latency.
+- The initial dashboard menu checks backend and database readiness and retries transient GET failures to better absorb cold starts on free hosting tiers.
 - The upload pipeline still depends on an external site, so scrape speed can vary based on network quality, rate limiting, and Letterboxd behavior.
-- The first request may take a minute to be executed due to the waking up time of the servers (currently hosted on free plans)
+- On the current free-tier deployment, the first request after inactivity may take longer while backend or database services wake up.
 
 ## Deployment notes
 
