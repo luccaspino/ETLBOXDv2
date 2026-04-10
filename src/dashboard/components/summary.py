@@ -203,7 +203,7 @@ def build_month_selection_chart(monthly_df: pd.DataFrame, selected_month: int | 
             x=alt.X(
                 "mes:O",
                 sort=list(range(1, 13)),
-                title="Mes assistido",
+                title="Mês assistido",
                 axis=alt.Axis(labelAngle=0),
             ),
             y=alt.Y("total:Q", title="Total de filmes logados"),
@@ -218,7 +218,7 @@ def build_month_selection_chart(monthly_df: pd.DataFrame, selected_month: int | 
                 alt.value(0.72),
             ),
             tooltip=[
-                alt.Tooltip("month_label:N", title="Mes"),
+                alt.Tooltip("month_label:N", title="Mês"),
                 alt.Tooltip("total:Q", title="Total"),
             ],
         )

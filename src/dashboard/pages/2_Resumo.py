@@ -69,7 +69,7 @@ def _describe_active_filters(
 ) -> str:
     active_filters: list[str] = []
     if selected_month is not None:
-        active_filters.append(f"mes {month_label(selected_month)}")
+        active_filters.append(f"mês {month_label(selected_month)}")
     if selected_year is not None:
         active_filters.append(f"ano {selected_year}")
     if selected_rating is not None:
@@ -101,8 +101,8 @@ with st.sidebar:
 
 if not username:
     render_empty_state(
-        "Selecione um usuario",
-        "Abra o Menu e escolha um usuario antes de consultar o resumo.",
+        "Selecione um usuário",
+        "Abra o Menu e escolha um usuário antes de consultar o resumo.",
     )
     st.stop()
 
@@ -124,7 +124,7 @@ selected_year = _coerce_selected_int(
 selected_rating = _coerce_selected_rating(st.session_state.get("summary_rating_filter"))
 
 try:
-    with st.spinner("Carregando resumo analitico..."):
+    with st.spinner("Carregando resumo analítico..."):
         summary_bundle = get_summary_bundle(username)
         main_kpis = summary_bundle["main_kpis"]
         rating_gap = summary_bundle["rating_gap"]
@@ -157,7 +157,7 @@ if logged_films_supported and active_filters_label:
     with filter_col:
         st.info(
             f"Filtros cruzados ativos: {active_filters_label}. "
-            "Os indicadores e distribuicoes abaixo usam a intersecao desses recortes."
+            "Os indicadores e distribuições abaixo usam a interseção desses recortes."
         )
     with action_col:
         if st.button("Limpar filtros", width="stretch"):
@@ -168,9 +168,9 @@ if logged_films_supported and active_filters_label:
             st.rerun()
 elif not logged_films_supported:
     st.info(
-        "Modo de compatibilidade ativo: o backend atual ainda nao publicou os logs detalhados, "
-        "entao os totais continuam corretos e a colagem usa o comportamento anterior. "
-        "O filtro cruzado por clique nos graficos sera habilitado quando a rota nova estiver disponivel."
+        "Modo de compatibilidade ativo: o backend atual ainda não publicou os logs detalhados, "
+        "então os totais continuam corretos e a colagem usa o comportamento anterior. "
+        "O filtro cruzado por clique nos gráficos será habilitado quando a rota nova estiver disponível."
     )
 
 logged_films_df = build_logged_films_dataframe(logged_film_rows) if logged_films_supported else pd.DataFrame()
@@ -218,7 +218,7 @@ if logged_films_supported:
     genre_distribution = aggregate_name_counts(
         filtered_logs_df,
         list_column="genres_list",
-        output_label="genero",
+        output_label="genre_name",
     )
 else:
     metrics = {
@@ -236,16 +236,16 @@ else:
 
 metrics_row = st.columns(6)
 metrics_row[0].metric("Total de filmes", metrics.get("total_filmes", 0))
-metrics_row[1].metric("Media pessoal", metrics.get("media_nota_pessoal"))
+metrics_row[1].metric("Média pessoal", metrics.get("media_nota_pessoal"))
 metrics_row[2].metric("Total de horas", metrics.get("total_horas", 0.0))
-metrics_row[3].metric("Diferenca media", metrics.get("diferenca_media"))
-metrics_row[4].metric("Media Letterboxd", metrics.get("media_letterboxd"))
-metrics_row[5].metric("Ano medio", metrics.get("ano_medio_lancamento"))
+metrics_row[3].metric("Diferença média", metrics.get("diferenca_media"))
+metrics_row[4].metric("Média Letterboxd", metrics.get("media_letterboxd"))
+metrics_row[5].metric("Ano médio", metrics.get("ano_medio_lancamento"))
 
 charts_col1, charts_col2 = st.columns(2)
 
 with charts_col1:
-    st.subheader("Logs por mes")
+    st.subheader("Logs por mês")
     if logged_films_supported:
         monthly_chart = build_month_selection_chart(monthly_df, selected_month)
         month_chart_event = st.altair_chart(
@@ -261,15 +261,15 @@ with charts_col1:
             st.rerun()
 
         if selected_month is None and not active_filters_label:
-            st.caption("Clique nas barras de mes, ano ou nota para aplicar o filtro cruzado na pagina.")
+            st.caption("Clique nas barras de mês, ano ou nota para aplicar o filtro cruzado na página.")
         elif selected_month is None:
-            st.caption("Clique em um mes para adicionar esse recorte ao filtro cruzado atual.")
+            st.caption("Clique em um mês para adicionar esse recorte ao filtro cruzado atual.")
         else:
-            st.caption("Duplo clique neste grafico remove apenas o filtro de mes.")
+            st.caption("Duplo clique neste gráfico remove apenas o filtro de mês.")
     else:
         monthly_df = pd.DataFrame(monthly_logs)
         if monthly_df.empty:
-            render_empty_state("Sem dados mensais", "Nenhum log mensal foi encontrado para este usuario.")
+            render_empty_state("Sem dados mensais", "Nenhum log mensal foi encontrado para este usuário.")
         else:
             monthly_df = monthly_df.sort_values("mes")
             st.bar_chart(monthly_df.set_index("mes"))
@@ -277,7 +277,7 @@ with charts_col1:
 with charts_col2:
     st.subheader("Logs por ano")
     if yearly_df.empty:
-        render_empty_state("Sem dados anuais", "Nenhum log anual foi encontrado para este usuario.")
+        render_empty_state("Sem dados anuais", "Nenhum log anual foi encontrado para este usuário.")
     elif logged_films_supported:
         yearly_chart = build_year_selection_chart(yearly_df, selected_year)
         year_chart_event = st.altair_chart(
@@ -295,16 +295,16 @@ with charts_col2:
         if selected_year is None:
             st.caption("Clique em um ano para adicionar esse recorte ao filtro cruzado atual.")
         else:
-            st.caption("Duplo clique neste grafico remove apenas o filtro de ano.")
+            st.caption("Duplo clique neste gráfico remove apenas o filtro de ano.")
     else:
         st.bar_chart(yearly_df.set_index("ano"))
 
 distribution_row = st.columns(3)
 
 with distribution_row[0]:
-    st.subheader("Distribuicao de notas")
+    st.subheader("Distribuição de notas")
     if rating_df.empty:
-        render_empty_state("Sem distribuicao", "Nao ha distribuicao de notas disponivel para este recorte.")
+        render_empty_state("Sem distribuição", "Não há distribuição de notas disponível para este recorte.")
     else:
         if logged_films_supported:
             rating_chart = build_rating_selection_chart(rating_df, selected_rating)
@@ -323,28 +323,28 @@ with distribution_row[0]:
             if selected_rating is None:
                 st.caption("Clique em uma nota para adicionar esse recorte ao filtro cruzado atual.")
             else:
-                st.caption("Duplo clique neste grafico remove apenas o filtro de nota.")
+                st.caption("Duplo clique neste gráfico remove apenas o filtro de nota.")
         else:
             st.bar_chart(rating_df.set_index("rating"))
         render_records_table(rating_df.to_dict("records"))
 
 with distribution_row[1]:
-    st.subheader("Top paises")
+    st.subheader("Top países")
     if not country_distribution:
-        render_empty_state("Sem paises", "Nao ha paises disponiveis para este recorte.")
+        render_empty_state("Sem países", "Não há países disponíveis para este recorte.")
     else:
         render_records_table(country_distribution[:10])
 
 with distribution_row[2]:
-    st.subheader("Top generos")
+    st.subheader("Top gêneros")
     if not genre_distribution:
-        render_empty_state("Sem generos", "Nao ha generos disponiveis para este recorte.")
+        render_empty_state("Sem gêneros", "Não há gêneros disponíveis para este recorte.")
     else:
         render_records_table(genre_distribution[:10])
 
 st.markdown("---")
 st.subheader("Colagem mensal")
-st.caption("Posteres com tamanho fixo e legenda sobreposta para um mes assistido.")
+st.caption("Pôsteres com tamanho fixo e legenda sobreposta para um mês assistido.")
 
 if logged_films_supported:
     collage_source_df = filter_logged_films(logged_films_df, rating=selected_rating)
@@ -359,7 +359,7 @@ else:
     )
 
 if not available_years:
-    render_empty_state("Sem meses disponiveis", "Nao ha filmes com data assistida para montar a colagem.")
+    render_empty_state("Sem meses disponíveis", "Não há filmes com data assistida para montar a colagem.")
 else:
     collage_control_col1, collage_control_col2 = st.columns([1, 1])
     with collage_control_col1:
@@ -403,17 +403,17 @@ else:
     if not available_months:
         render_empty_state(
             "Sem filmes nesse ano",
-            "Nenhum filme com data assistida valida foi encontrado para o ano selecionado.",
+            "Nenhum filme com data assistida válida foi encontrado para o ano selecionado.",
         )
     else:
         if logged_films_supported and selected_month is not None:
             selected_collage_month = selected_month
             with collage_control_col2:
-                st.metric("Mes da colagem", month_label(selected_collage_month))
+                st.metric("Mês da colagem", month_label(selected_collage_month))
         else:
             with collage_control_col2:
                 selected_collage_month = st.selectbox(
-                    "Mes da colagem",
+                    "Mês da colagem",
                     options=available_months,
                     format_func=month_label,
                     key=f"month-collage-month-{selected_collage_year}",
@@ -426,7 +426,7 @@ else:
             if active_filters_label:
                 st.caption(
                     "A colagem acompanha os filtros cruzados ativos; os seletores acima controlam apenas "
-                    "dimensoes ainda nao fixadas por clique."
+                    "dimensões ainda não fixadas por clique."
                 )
         else:
             month_collage_rows = [
@@ -438,13 +438,13 @@ else:
         if not month_collage_rows:
             if logged_films_supported and selected_month is not None:
                 render_empty_state(
-                    "Sem filmes nesse mes",
-                    f"Nao ha posteres para {month_label(selected_month)} em {selected_collage_year}.",
+                    "Sem filmes nesse mês",
+                    f"Não há pôsteres para {month_label(selected_month)} em {selected_collage_year}.",
                 )
             else:
                 render_empty_state(
-                    "Sem filmes nesse mes",
-                    "Nao ha posteres disponiveis para o mes selecionado.",
+                    "Sem filmes nesse mês",
+                    "Não há pôsteres disponíveis para o mês selecionado.",
                 )
         else:
             st.caption(

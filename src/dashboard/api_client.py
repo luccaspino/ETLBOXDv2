@@ -20,8 +20,8 @@ _SHARED_HTTP_CLIENTS: dict[str, httpx.Client] = {}
 _SHARED_HTTP_CLIENTS_LOCK = threading.Lock()
 _GET_RETRY_ATTEMPTS = 3
 _TRANSIENT_HTTP_STATUS_MESSAGES = {
-    502: "O backend retornou 502 e esta temporariamente indisponivel. Tente novamente em instantes.",
-    503: "O backend esta temporariamente indisponivel. Tente novamente em instantes.",
+    502: "O backend retornou 502 e está temporariamente indisponível. Tente novamente em instantes.",
+    503: "O backend está temporariamente indisponível. Tente novamente em instantes.",
     504: "A API demorou demais para responder. Tente novamente em instantes.",
 }
 
@@ -57,7 +57,7 @@ def get_api_base_url() -> str:
             return str(secret_value).strip().rstrip("/")
 
     raise ApiClientError(
-        "API_BASE_URL nao configurada. Defina no .env local ou em st.secrets no Streamlit Cloud.",
+        "API_BASE_URL não configurada. Defina no .env local ou em st.secrets no Streamlit Cloud.",
     )
 
 
@@ -126,7 +126,7 @@ def _retry_delay_seconds(response: httpx.Response, attempt: int) -> float:
 
 def _request_error_detail(base_url: str) -> str:
     return (
-        f"Não foi possivel conectar a API. "
+        f"Não foi possível conectar a API. "
         "O backend ainda está acordando; tente novamente em alguns segundos."
     )
 
@@ -176,9 +176,9 @@ def _request_json(
         try:
             return response.json()
         except ValueError as err:
-            raise ApiClientError("A API retornou uma resposta JSON invalida.") from err
+            raise ApiClientError("A API retornou uma resposta JSON inválida.") from err
 
-    raise ApiClientError("A API retornou um erro inesperado sem resposta valida.")
+    raise ApiClientError("A API retornou um erro inesperado sem resposta válida.")
 
 
 def _run_parallel_calls(calls: dict[str, Callable[[], Any]]) -> dict[str, Any]:
@@ -237,7 +237,7 @@ def get_backend_status() -> dict[str, str]:
         detail = err.detail if isinstance(err.detail, str) and err.detail.strip() else str(err)
         return {
             "state": "unavailable",
-            "label": "Backend indisponivel",
+            "label": "Backend indisponível",
             "detail": detail,
         }
 
@@ -253,14 +253,14 @@ def get_backend_status() -> dict[str, str]:
             }
         return {
             "state": "degraded",
-            "label": "API online, banco indisponivel",
+            "label": "API online, banco indisponível",
             "detail": detail,
         }
 
     return {
         "state": "online",
         "label": "Backend ativo",
-        "detail": "API e banco estao acessiveis.",
+        "detail": "API e banco estão acessíveis.",
     }
 
 

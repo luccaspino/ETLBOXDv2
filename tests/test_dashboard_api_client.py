@@ -38,7 +38,7 @@ def test_get_backend_status_reports_online_when_api_and_db_are_available(monkeyp
     assert payload == {
         "state": "online",
         "label": "Backend ativo",
-        "detail": "API e banco estao acessiveis.",
+        "detail": "API e banco estão acessíveis.",
     }
 
 
@@ -78,7 +78,7 @@ def test_get_backend_status_reports_unavailable_when_health_check_cannot_connect
         lambda method, path, **kwargs: (_ for _ in ()).throw(
             api_client.ApiClientError(
                 "Backend offline",
-                detail="Nao foi possivel conectar a API em https://api.example.com.",
+                detail="Não foi possível conectar a API em https://api.example.com.",
             )
         ),
     )
@@ -87,8 +87,8 @@ def test_get_backend_status_reports_unavailable_when_health_check_cannot_connect
 
     assert payload == {
         "state": "unavailable",
-        "label": "Backend indisponivel",
-        "detail": "Nao foi possivel conectar a API em https://api.example.com.",
+        "label": "Backend indisponível",
+        "detail": "Não foi possível conectar a API em https://api.example.com.",
     }
 
 
@@ -254,7 +254,7 @@ def test_request_json_reports_helpful_message_after_connection_failures(monkeypa
     except api_client.ApiClientError as err:
         assert err.detail is None
         assert str(err) == (
-            "Não foi possivel conectar a API. "
+            "Não foi possível conectar a API. "
             "O backend ainda está acordando; tente novamente em alguns segundos."
         )
     else:  # pragma: no cover
@@ -306,6 +306,6 @@ def test_request_json_hides_html_from_gateway_502(monkeypatch) -> None:
         api_client._request_json("POST", "/pipeline/run")
     except api_client.ApiClientError as err:
         assert err.status_code == 502
-        assert err.detail == "O backend retornou 502 e esta temporariamente indisponivel. Tente novamente em instantes."
+        assert err.detail == "O backend retornou 502 e está temporariamente indisponível. Tente novamente em instantes."
     else:  # pragma: no cover
         raise AssertionError("Era esperado propagar ApiClientError para 502 HTML.")
