@@ -254,8 +254,8 @@ def test_request_json_reports_helpful_message_after_connection_failures(monkeypa
     except api_client.ApiClientError as err:
         assert err.detail is None
         assert str(err) == (
-            "Nao foi possivel conectar a API em https://api.example.com. "
-            "O backend pode estar acordando; tente novamente em instantes."
+            "Não foi possivel conectar a API. "
+            "O backend ainda está acordando; tente novamente em alguns segundos."
         )
     else:  # pragma: no cover
         raise AssertionError("Era esperado propagar ApiClientError apos esgotar os retries de conexao.")
