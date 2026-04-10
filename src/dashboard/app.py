@@ -17,7 +17,12 @@ except Exception as err:  # pragma: no cover
         "Streamlit não instalado. Adicione `streamlit` ao requirements para usar o dashboard."
     ) from err
 
-from src.dashboard.api_client import ApiClientError, get_user_lookup, run_pipeline_upload
+from src.dashboard.api_client import (
+    ApiClientError,
+    get_backend_status,
+    get_user_lookup,
+    run_pipeline_upload,
+)
 from src.dashboard.branding import configure_page, render_sidebar_nav
 from src.dashboard.components.messages import render_api_error
 from src.dashboard.state import (
@@ -116,6 +121,29 @@ st.link_button(
     "https://letterboxd.com/data/export/",
     width="content",
 )
+
+with st.container(border=True):
+    status_col, refresh_col = st.columns([4, 1])
+    with status_col:
+        st.subheader("Status do backend")
+    with refresh_col:
+        if st.button("Atualizar status", key="refresh-backend-status", width="stretch"):
+            clear = getattr(get_backend_status, "clear", None)
+            if callable(clear):
+                clear()
+            st.rerun()
+
+    backend_status = get_backend_status()
+    backend_detail = str(backend_status.get("detail", "")).strip()
+    backend_label = str(backend_status.get("label", "Status desconhecido")).strip()
+    backend_state = str(backend_status.get("state", "")).strip()
+
+    if backend_state == "online":
+        st.success(f"{backend_label}. {backend_detail}")
+    elif backend_state == "warming":
+        st.warning(f"{backend_label}. {backend_detail}")
+    else:
+        st.error(f"{backend_label}. {backend_detail}")
 
 current_summary = get_last_pipeline_summary()
 current_user = get_active_username()

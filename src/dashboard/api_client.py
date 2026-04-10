@@ -124,6 +124,13 @@ def _retry_delay_seconds(response: httpx.Response, attempt: int) -> float:
     return float(attempt)
 
 
+def _request_error_detail(base_url: str) -> str:
+    return (
+        f"Não foi possivel conectar a API. "
+        "O backend ainda está acordando; tente novamente em alguns segundos."
+    )
+
+
 def _request_json(
     method: str,
     path: str,
@@ -149,9 +156,10 @@ def _request_json(
                 timeout=timeout,
             )
         except httpx.RequestError as err:
-            raise ApiClientError(
-                f"Nao foi possivel conectar a API em {base_url}.",
-            ) from err
+            if method_upper == "GET" and attempt < max_attempts:
+                time.sleep(float(attempt))
+                continue
+            raise ApiClientError(_request_error_detail(base_url)) from err
 
         if response.status_code == 503 and method_upper == "GET" and attempt < max_attempts:
             time.sleep(_retry_delay_seconds(response, attempt))
@@ -191,6 +199,7 @@ def _run_parallel_calls(calls: dict[str, Callable[[], Any]]) -> dict[str, Any]:
 
 def clear_dashboard_caches() -> None:
     for func in [
+        get_backend_status,
         get_user_lookup,
         get_main_kpis,
         get_rating_gap_kpis,
@@ -218,6 +227,41 @@ def run_pipeline_upload(file_name: str, file_bytes: bytes) -> dict[str, Any]:
     payload = _request_json("POST", "/pipeline/run", files=files, timeout=300.0)
     clear_dashboard_caches()
     return dict(payload)
+
+
+@_cache_data(ttl=15, max_entries=4)
+def get_backend_status() -> dict[str, str]:
+    try:
+        _request_json("GET", "/health", timeout=5.0)
+    except ApiClientError as err:
+        detail = err.detail if isinstance(err.detail, str) and err.detail.strip() else str(err)
+        return {
+            "state": "unavailable",
+            "label": "Backend indisponivel",
+            "detail": detail,
+        }
+
+    try:
+        _request_json("GET", "/health/db", timeout=5.0)
+    except ApiClientError as err:
+        detail = err.detail if isinstance(err.detail, str) and err.detail.strip() else str(err)
+        if err.status_code == 503:
+            return {
+                "state": "warming",
+                "label": "Banco acordando",
+                "detail": detail,
+            }
+        return {
+            "state": "degraded",
+            "label": "API online, banco indisponivel",
+            "detail": detail,
+        }
+
+    return {
+        "state": "online",
+        "label": "Backend ativo",
+        "detail": "API e banco estao acessiveis.",
+    }
 
 
 @_cache_data()

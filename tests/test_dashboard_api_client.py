@@ -26,6 +26,72 @@ def test_run_pipeline_upload_uses_api_defaults(monkeypatch) -> None:
     assert captured["files"] == {"file": ("letterboxd.zip", b"zip-bytes", "application/zip")}
 
 
+def test_get_backend_status_reports_online_when_api_and_db_are_available(monkeypatch) -> None:
+    clear = getattr(api_client.get_backend_status, "clear", None)
+    if callable(clear):
+        clear()
+
+    monkeypatch.setattr(api_client, "_request_json", lambda method, path, **kwargs: {"status": "ok"})
+
+    payload = api_client.get_backend_status()
+
+    assert payload == {
+        "state": "online",
+        "label": "Backend ativo",
+        "detail": "API e banco estao acessiveis.",
+    }
+
+
+def test_get_backend_status_reports_warming_when_database_health_returns_503(monkeypatch) -> None:
+    clear = getattr(api_client.get_backend_status, "clear", None)
+    if callable(clear):
+        clear()
+
+    def fake_request_json(method: str, path: str, **kwargs):
+        if path == "/health":
+            return {"status": "ok"}
+        raise api_client.ApiClientError(
+            "Database unavailable",
+            status_code=503,
+            detail="Banco temporariamente indisponivel.",
+        )
+
+    monkeypatch.setattr(api_client, "_request_json", fake_request_json)
+
+    payload = api_client.get_backend_status()
+
+    assert payload == {
+        "state": "warming",
+        "label": "Banco acordando",
+        "detail": "Banco temporariamente indisponivel.",
+    }
+
+
+def test_get_backend_status_reports_unavailable_when_health_check_cannot_connect(monkeypatch) -> None:
+    clear = getattr(api_client.get_backend_status, "clear", None)
+    if callable(clear):
+        clear()
+
+    monkeypatch.setattr(
+        api_client,
+        "_request_json",
+        lambda method, path, **kwargs: (_ for _ in ()).throw(
+            api_client.ApiClientError(
+                "Backend offline",
+                detail="Nao foi possivel conectar a API em https://api.example.com.",
+            )
+        ),
+    )
+
+    payload = api_client.get_backend_status()
+
+    assert payload == {
+        "state": "unavailable",
+        "label": "Backend indisponivel",
+        "detail": "Nao foi possivel conectar a API em https://api.example.com.",
+    }
+
+
 def test_get_logged_films_uses_new_route_when_available(monkeypatch) -> None:
     monkeypatch.setattr(
         api_client,
@@ -140,6 +206,62 @@ def test_request_json_retries_get_when_backend_returns_503(monkeypatch) -> None:
 
     assert payload == {"username": "ppino"}
     assert captured_sleeps == [0.0]
+
+
+def test_request_json_retries_get_when_connection_fails(monkeypatch) -> None:
+    request = httpx.Request("GET", "https://api.example.com/users/ppino")
+    responses = iter(
+        [
+            httpx.ConnectError("backend cold start", request=request),
+            httpx.Response(200, json={"username": "ppino"}),
+        ]
+    )
+    captured_sleeps: list[float] = []
+
+    class FakeClient:
+        def request(self, **kwargs):
+            result = next(responses)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+    monkeypatch.setattr(api_client, "get_api_base_url", lambda: "https://api.example.com")
+    monkeypatch.setattr(api_client, "_get_http_client", lambda base_url: FakeClient())
+    monkeypatch.setattr(api_client.time, "sleep", lambda seconds: captured_sleeps.append(seconds))
+
+    payload = api_client._request_json("GET", "/users/ppino")
+
+    assert payload == {"username": "ppino"}
+    assert captured_sleeps == [1.0]
+
+
+def test_request_json_reports_helpful_message_after_connection_failures(monkeypatch) -> None:
+    request = httpx.Request("GET", "https://api.example.com/users/ppino")
+    captured_sleeps: list[float] = []
+    calls = {"count": 0}
+
+    class FakeClient:
+        def request(self, **kwargs):
+            calls["count"] += 1
+            raise httpx.ConnectError("backend cold start", request=request)
+
+    monkeypatch.setattr(api_client, "get_api_base_url", lambda: "https://api.example.com")
+    monkeypatch.setattr(api_client, "_get_http_client", lambda base_url: FakeClient())
+    monkeypatch.setattr(api_client.time, "sleep", lambda seconds: captured_sleeps.append(seconds))
+
+    try:
+        api_client._request_json("GET", "/users/ppino")
+    except api_client.ApiClientError as err:
+        assert err.detail is None
+        assert str(err) == (
+            "Nao foi possivel conectar a API em https://api.example.com. "
+            "O backend pode estar acordando; tente novamente em instantes."
+        )
+    else:  # pragma: no cover
+        raise AssertionError("Era esperado propagar ApiClientError apos esgotar os retries de conexao.")
+
+    assert calls["count"] == 3
+    assert captured_sleeps == [1.0, 2.0]
 
 
 def test_request_json_does_not_retry_post_when_backend_returns_503(monkeypatch) -> None:
